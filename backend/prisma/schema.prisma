@@ -14,7 +14,12 @@ model Estabelecimento {
   cep           String
   endereco      String
   taxa_servico  Float
-  logo_url      String
+  logo_url      String   @db.Text
+  tema_fundo_geral String? @db.VarChar(20)
+  tema_fundo_cartoes String? @db.VarChar(20)
+  tema_cor_texto String? @db.VarChar(20)
+  tema_cor_primaria String? @db.VarChar(20)
+  tema_cor_destaque String? @db.VarChar(20)
   criadoEm      DateTime  @default(now())
   atualizadoEm  DateTime  @updatedAt
 
@@ -59,8 +64,9 @@ model Produto {
   nome             String
   preco            Float
   descricao        String?
-  categoria        Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
-  categoriaId      Int
+  imagem_url       String?  @db.Text
+  categoria        Categoria? @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  categoriaId      Int?
   estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
   estabelecimentoId Int
   criadoEm         DateTime @default(now())

@@ -10,6 +10,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'troque_esta_chave_em_producao';
 router.post('/admin', async (req, res) => {
   const { usuario, senha } = req.body;
   try {
+    // log minimal para debugging
+    // eslint-disable-next-line no-console
+    console.log('auth.admin login attempt for usuario:', usuario);
     const admin = await prisma.usuarioAdmin.findFirst({ where: { usuario } });
     if (!admin) return res.status(401).json({ error: 'Credenciais inválidas' });
     const ok = await bcrypt.compare(senha, admin.senhaHash);

@@ -1,7 +1,8 @@
 
 import { RegistrationState } from '../types';
 
-const API_BASE = (process.env.API_URL || '').replace(/\/$/, '') || '';
+// default to backend dev port 4001 if API_URL not provided
+const API_BASE = (process.env.API_URL || 'http://localhost:4001').replace(/\/$/, '');
 
 const TOKEN_KEY = 'gm_token';
 const ESTAB_KEY = 'gm_estabelecimentoId';
@@ -29,12 +30,13 @@ export function getEstabelecimentoId(): number | null {
   return v ? Number(v) : null;
 }
 
-export interface Produto {
+export interface Product {
   id: number;
-  nome: string;
-  preco: number;
-  categoria?: string;
-  descricao?: string;
+  name: string;
+  price: number;
+  category?: string;
+  description?: string;
+  imagem_url?: string;
 }
 
 async function fetchJson(input: RequestInfo, init?: RequestInit) {
@@ -59,10 +61,19 @@ export const api = {
     return res;
   },
 
-  async getProducts(estabelecimentoId: number): Promise<Produto[]> {
+  async getProducts(estabelecimentoId: number): Promise<Product[]> {
     const query = new URLSearchParams({ estabelecimentoId: String(estabelecimentoId) });
     const url = `${API_BASE}/api/produtos?${query.toString()}`;
-    return fetchJson(url);
+    const raw = await fetchJson(url);
+    // map backend fields (pt-BR) to frontend-friendly names
+    return (raw || []).map((p: any) => ({
+      id: p.id,
+      name: p.nome ?? p.name,
+      price: p.preco ?? p.price,
+      category: p.categoria ?? p.category,
+      description: p.descricao ?? p.description,
+      imagem_url: p.imagem_url ?? p.imagemUrl ?? p.imageUrl ?? null,
+    }));
   },
 
   async loginAdmin(usuario: string, senha: string) {
@@ -81,6 +92,90 @@ export const api = {
       salvarAuth(res.token, res.estabelecimentoId);
     }
     return res;
+  },
+
+  // --- Categorias ---
+  async getCategories(estabelecimentoId: number) {
+    const url = `${API_BASE}/api/categorias?estabelecimentoId=${estabelecimentoId}`;
+    return fetchJson(url);
+  },
+
+  async createCategory(nome: string) {
+    const url = `${API_BASE}/api/categorias`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) });
+  },
+
+  async updateCategory(id: number, nome: string) {
+    const url = `${API_BASE}/api/categorias/${id}`;
+    return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) });
+  },
+
+  async deleteCategory(id: number) {
+    const url = `${API_BASE}/api/categorias/${id}`;
+    return fetchJson(url, { method: 'DELETE' });
+  },
+
+  // --- Produtos ---
+  async createProduct(data: { nome: string; preco: number; descricao?: string; categoriaId?: number; imagem_url?: string }) {
+    const url = `${API_BASE}/api/produtos`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+
+  async updateProduct(id: number, data: { nome?: string; preco?: number; descricao?: string; categoriaId?: number; imagem_url?: string }) {
+    const url = `${API_BASE}/api/produtos/${id}`;
+    return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+
+  async deleteProduct(id: number) {
+    const url = `${API_BASE}/api/produtos/${id}`;
+    return fetchJson(url, { method: 'DELETE' });
+  },
+
+  async uploadProductImage(file: File) {
+    const url = `${API_BASE}/api/produtos/upload`;
+    const token = getToken();
+    const fd = new FormData();
+    fd.append('file', file);
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { method: 'POST', body: fd, headers });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  // --- Garçons ---
+  async getWaiters(estabelecimentoId: number) {
+    const url = `${API_BASE}/api/garcons?estabelecimentoId=${estabelecimentoId}`;
+    return fetchJson(url);
+  },
+
+  // --- Stats ---
+  async getDailyStats(estabelecimentoId: number) {
+    const url = `${API_BASE}/api/stats/daily?estabelecimentoId=${estabelecimentoId}`;
+    return fetchJson(url);
+  },
+  async getEstablishment() {
+    const url = `${API_BASE}/api/estabelecimentos/me`;
+    return fetchJson(url);
+  },
+  async updateEstablishment(data: { taxa_servico?: number; tema_fundo_geral?: string; tema_fundo_cartoes?: string; tema_cor_texto?: string; tema_cor_primaria?: string; tema_cor_destaque?: string }) {
+    const url = `${API_BASE}/api/estabelecimentos/me`;
+    return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+
+  async createWaiter(nome: string, senha: string) {
+    const url = `${API_BASE}/api/garcons`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, senha }) });
+  },
+
+  async updateWaiter(id: number, data: { nome?: string; senha?: string; ativo?: boolean }) {
+    const url = `${API_BASE}/api/garcons/${id}`;
+    return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+
+  async deleteWaiter(id: number) {
+    const url = `${API_BASE}/api/garcons/${id}`;
+    return fetchJson(url, { method: 'DELETE' });
   },
 
   async sendOrder(estabelecimentoId: number, mesaNumero: string, itens: Array<{ produtoId: number; quantidade: number; observacoes?: string }>) {

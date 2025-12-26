@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { api } from '../services/api';
 
 interface Props {
   onBack: () => void;
@@ -22,8 +23,9 @@ export const AdminLogin: React.FC<Props> = ({ onBack, onLogin }) => {
         } else {
           alert('Credenciais inválidas');
         }
-      } catch (e) {
-        alert('Erro ao conectar com o servidor');
+      } catch (e: any) {
+        console.error('Erro no login admin:', e);
+        alert('Erro ao conectar com o servidor: ' + (e?.message || e));
       } finally {
         setIsLoading(false);
       }
