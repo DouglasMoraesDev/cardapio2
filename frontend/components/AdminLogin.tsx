@@ -14,10 +14,20 @@ export const AdminLogin: React.FC<Props> = ({ onBack, onLogin }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      onLogin({ username, password });
-      setIsLoading(false);
-    }, 1000);
+    (async () => {
+      try {
+        const res = await api.loginAdmin(username, password);
+        if (res && res.sucesso) {
+          onLogin({ username });
+        } else {
+          alert('Credenciais inválidas');
+        }
+      } catch (e) {
+        alert('Erro ao conectar com o servidor');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   };
 
   return (

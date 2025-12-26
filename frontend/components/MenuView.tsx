@@ -25,9 +25,13 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
   useEffect(() => {
     const loadData = async () => {
       try {
-        // TODO: substituir estabelecimentoId fixo pelo contexto/estado real após login
-        const ESTABELECIMENTO_ID = 1;
-        const data = await api.getProducts(ESTABELECIMENTO_ID);
+        const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+        if (!estabId) {
+          console.error('EstabelecimentoId não encontrado no localStorage');
+          setProducts([]);
+          return;
+        }
+        const data = await api.getProducts(estabId);
         setProducts(data);
       } catch (error) {
         console.error("Erro ao carregar cardápio", error);

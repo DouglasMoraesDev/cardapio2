@@ -14,10 +14,21 @@ export const WaiterLogin: React.FC<Props> = ({ onBack, onLogin }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      onLogin({ username, password });
-      setIsLoading(false);
-    }, 1000);
+    (async () => {
+      try {
+        const estabelecimentoId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+        const res = await api.loginGarcom(username, password, estabelecimentoId);
+        if (res && res.sucesso) {
+          onLogin({ username });
+        } else {
+          alert('Credenciais inválidas');
+        }
+      } catch (e) {
+        alert('Erro ao conectar com o servidor');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   };
 
   return (

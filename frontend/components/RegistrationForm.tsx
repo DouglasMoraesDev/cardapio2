@@ -44,7 +44,7 @@ export const RegistrationForm: React.FC<Props> = ({ onSubmit }) => {
     setIsLoading(true);
     try {
       const response = await api.registerRestaurant(formData);
-      if (response.success) {
+      if (response && response.sucesso) {
         onSubmit(formData);
       }
     } catch (error) {
