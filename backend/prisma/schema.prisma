@@ -22,6 +22,7 @@ model Estabelecimento {
   garcons        Garcom[]
   categorias     Categoria[]
   produtos       Produto[]
+  pedidos        Pedido[] @relation("EstabPedidos")
   mesas          Mesa[]
 }
 
@@ -41,6 +42,7 @@ model Garcom {
   ativo            Boolean @default(true)
   estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
   estabelecimentoId Int
+  pedidos          Pedido[] @relation("GarcomPedidos")
   criadoEm         DateTime @default(now())
 }
 
@@ -57,11 +59,12 @@ model Produto {
   nome             String
   preco            Float
   descricao        String?
-  categoria        Categoria? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
-  categoriaId      Int?
+  categoria        Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  categoriaId      Int
   estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
   estabelecimentoId Int
   criadoEm         DateTime @default(now())
+  itensPedido      ItemPedido[] @relation("ProdutoItens")
 }
 
 model Mesa {
@@ -78,9 +81,9 @@ model Pedido {
   id               Int    @id @default(autoincrement())
   mesa             Mesa   @relation(fields: [mesaId], references: [id], onDelete: Cascade)
   mesaId           Int
-  garcom           Garcom? @relation(fields: [garcomId], references: [id], onDelete: SetNull)
-  garcomId         Int?
-  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  garcom           Garcom @relation("GarcomPedidos", fields: [garcomId], references: [id], onDelete: Cascade)
+  garcomId         Int
+  estabelecimento  Estabelecimento @relation("EstabPedidos", fields: [estabelecimentoId], references: [id], onDelete: Cascade)
   estabelecimentoId Int
   status           PedidoStatus @default(PENDENTE)
   total            Float
@@ -92,7 +95,7 @@ model ItemPedido {
   id        Int     @id @default(autoincrement())
   pedido    Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
   pedidoId  Int
-  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+  produto   Produto @relation("ProdutoItens", fields: [produtoId], references: [id], onDelete: Cascade)
   produtoId Int
   quantidade Int
   precoUnitario Float
