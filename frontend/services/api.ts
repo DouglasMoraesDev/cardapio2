@@ -1,49 +1,45 @@
 
-import { RegistrationState, RestaurantData } from '../types';
+import { RegistrationState } from '../types';
 
-// Aqui você configurará a URL do seu backend futuramente
-const API_BASE_URL = process.env.API_URL || 'http://localhost:3000/api';
+const API_BASE = (process.env.API_URL || '').replace(/\/$/, '') || '';
 
-export interface Product {
+export interface Produto {
   id: number;
-  name: string;
-  price: number;
-  category: string;
-  description: string;
+  nome: string;
+  preco: number;
+  categoria?: string;
+  descricao?: string;
+}
+
+async function fetchJson(input: RequestInfo, init?: RequestInit) {
+  const res = await fetch(input, init);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json();
 }
 
 export const api = {
-  // Configuração Inicial
-  async registerRestaurant(data: RegistrationState): Promise<{ success: boolean }> {
-    console.log('Enviando para o backend:', data);
-    // Simulação de delay de rede
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    localStorage.setItem('restaurant_config', JSON.stringify(data));
-    return { success: true };
+  async registerRestaurant(data: RegistrationState): Promise<{ sucesso: boolean; estabelecimento?: any }> {
+    const url = `${API_BASE}/api/estabelecimentos`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   },
 
-  // Cardápio
-  async getProducts(): Promise<Product[]> {
-    // Simulação de busca no banco de dados
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return [
-      { id: 1, name: 'dark', price: 31.00, category: 'Cerveja', description: 'Cerveja artesanal dark de alta fermentação.' },
-      { id: 2, name: 'Pilsen Gold', price: 18.00, category: 'Cerveja', description: 'Pilsen clássica e refrescante.' },
-      { id: 3, name: 'IPA Explosive', price: 25.00, category: 'Cerveja', description: 'Amargor intenso e aroma cítrico.' }
-    ];
+  async getProducts(estabelecimentoId: number): Promise<Produto[]> {
+    const query = new URLSearchParams({ estabelecimentoId: String(estabelecimentoId) });
+    const url = `${API_BASE}/api/produtos?${query.toString()}`;
+    return fetchJson(url);
   },
 
-  // Pedidos
-  async sendOrder(tableId: string, items: any[]): Promise<{ success: boolean }> {
-    console.log(`Enviando pedido da mesa ${tableId} para a cozinha:`, items);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    return { success: true };
+  async sendOrder(estabelecimentoId: number, mesaNumero: string, itens: Array<{ produtoId: number; quantidade: number; observacoes?: string }>) {
+    const url = `${API_BASE}/api/pedidos`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estabelecimentoId, mesaNumero, itens }) });
   },
 
-  // Fechamento
-  async requestBill(tableId: string): Promise<{ success: boolean }> {
-    console.log(`Solicitando fechamento da mesa ${tableId}`);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return { success: true };
+  async requestBill(estabelecimentoId: number, mesaId: number) {
+    const url = `${API_BASE}/api/mesas/${mesaId}/fechar`;
+    return fetchJson(url, { method: 'POST' });
   }
 };
+

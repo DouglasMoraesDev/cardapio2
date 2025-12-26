@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Estabelecimento {
+  id            Int       @id @default(autoincrement())
+  nome          String
+  documento     String
+  cep           String
+  endereco      String
+  taxa_servico  Float
+  logo_url      String
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  administradores UsuarioAdmin[]
+  garcons        Garcom[]
+  categorias     Categoria[]
+  produtos       Produto[]
+  mesas          Mesa[]
+}
+
+model UsuarioAdmin {
+  id               Int     @id @default(autoincrement())
+  usuario          String
+  senhaHash        String
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  criadoEm         DateTime @default(now())
+}
+
+model Garcom {
+  id               Int    @id @default(autoincrement())
+  nome             String
+  senhaHash        String
+  ativo            Boolean @default(true)
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  criadoEm         DateTime @default(now())
+}
+
+model Categoria {
+  id               Int    @id @default(autoincrement())
+  nome             String
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  produtos         Produto[]
+}
+
+model Produto {
+  id               Int    @id @default(autoincrement())
+  nome             String
+  preco            Float
+  descricao        String?
+  categoria        Categoria? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  categoriaId      Int?
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  criadoEm         DateTime @default(now())
+}
+
+model Mesa {
+  id               Int    @id @default(autoincrement())
+  numero           String
+  aberta           Boolean @default(true)
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  pedidos          Pedido[]
+  criadoEm         DateTime @default(now())
+}
+
+model Pedido {
+  id               Int    @id @default(autoincrement())
+  mesa             Mesa   @relation(fields: [mesaId], references: [id], onDelete: Cascade)
+  mesaId           Int
+  garcom           Garcom? @relation(fields: [garcomId], references: [id], onDelete: SetNull)
+  garcomId         Int?
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  status           PedidoStatus @default(PENDENTE)
+  total            Float
+  itens            ItemPedido[]
+  criadoEm         DateTime @default(now())
+}
+
+model ItemPedido {
+  id        Int     @id @default(autoincrement())
+  pedido    Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  pedidoId  Int
+  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+  produtoId Int
+  quantidade Int
+  precoUnitario Float
+}
+
+enum PedidoStatus {
+  PENDENTE
+  ENVIADO
+  SERVIDO
+  FECHADO
+}
