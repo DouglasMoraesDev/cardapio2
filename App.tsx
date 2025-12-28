@@ -43,8 +43,10 @@ const App: React.FC = () => {
     setView('menu');
   };
 
+  const mainClass = view === 'menu' ? 'flex-grow flex items-stretch justify-center p-0' : 'flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8';
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
       {view !== 'tables' && view !== 'admin-dashboard' && view !== 'menu' && (
         <Header 
           onWaiterLoginClick={() => setView('waiter-login')} 
@@ -52,7 +54,7 @@ const App: React.FC = () => {
         />
       )}
       
-      <main className="flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <main className={mainClass}>
         {view === 'register' && (
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="p-6 sm:p-10">

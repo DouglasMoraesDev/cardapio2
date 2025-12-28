@@ -156,6 +156,11 @@ export const api = {
     return fetchJson(url);
   },
 
+  async createMesa(estabelecimentoId: number, numero: string) {
+    const url = `${API_BASE}/api/mesas`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ numero, estabelecimentoId }) });
+  },
+
   async closeMesa(mesaIdOrNumero: number | string, taxaPaga: boolean) {
     const url = `${API_BASE}/api/mesas/${mesaIdOrNumero}/fechar`;
     return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taxaPaga }) });

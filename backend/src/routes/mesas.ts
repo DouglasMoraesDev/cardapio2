@@ -22,6 +22,24 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Criar mesa (se não existir)
+router.post('/', async (req, res) => {
+  try {
+    const { numero, estabelecimentoId: estabelecimentoIdBody } = req.body;
+    const estabelecimentoId = estabelecimentoIdBody || (req as any).estabelecimentoId;
+    if (!numero || !estabelecimentoId) return res.status(400).json({ error: 'Parâmetros inválidos' });
+    let mesa = await prisma.mesa.findFirst({ where: { numero: String(numero), estabelecimentoId } });
+    if (!mesa) {
+      mesa = await prisma.mesa.create({ data: { numero: String(numero), estabelecimentoId } });
+    }
+    return res.json({ sucesso: true, mesa });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    return res.status(500).json({ error: 'Erro ao criar mesa' });
+  }
+});
+
 // Fechar mesa (pedir fechamento) — por enquanto apenas marca pedidos como FECHADO e retorna total
 router.post('/:id/fechar', async (req, res) => {
   const param = req.params.id;

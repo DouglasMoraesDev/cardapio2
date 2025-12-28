@@ -28,14 +28,20 @@ export const TableManagement: React.FC<Props> = ({ waiterName, onLogout, onOpenT
     e.preventDefault();
     if (tableInput.trim()) {
       try { localStorage.setItem('gm_current_mesa', JSON.stringify({ numero: String(tableInput) })); } catch (e) {}
-      try {
-        const base = window.location.origin + window.location.pathname;
-        const url = `${base}?mesa=${encodeURIComponent(String(tableInput))}`;
-        window.open(url, '_blank');
-      } catch (e) {
-        // fallback to same-tab behavior
-        onOpenTable(tableInput);
-      }
+      (async () => {
+        try {
+          const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+          if (estabId) await api.createMesa(estabId, String(tableInput));
+        } catch (e) { /* ignore create errors */ }
+        try {
+          const base = window.location.origin + window.location.pathname;
+          const url = `${base}?mesa=${encodeURIComponent(String(tableInput))}`;
+          window.open(url, '_blank');
+        } catch (e) {
+          // fallback to same-tab behavior
+          onOpenTable(tableInput);
+        }
+      })();
       setIsTableModalOpen(false);
       setTableInput('');
     }
@@ -236,14 +242,17 @@ export const TableManagement: React.FC<Props> = ({ waiterName, onLogout, onOpenT
   const handleOpenCardapioFromMesa = (mesa: any) => {
     // persist mesa data so MenuView can load account items
     try { localStorage.setItem('gm_current_mesa', JSON.stringify(mesa)); } catch (e) { /* ignore */ }
-    try {
-      const base = window.location.origin + window.location.pathname;
-      const url = `${base}?mesa=${encodeURIComponent(String(mesa.numero))}`;
-      window.open(url, '_blank');
-    } catch (e) {
-      // fallback: open in same tab
-      onOpenTable(String(mesa.numero));
-    }
+    (async () => {
+      try { const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0); if (estabId) await api.createMesa(estabId, String(mesa.numero)); } catch(e) {}
+      try {
+        const base = window.location.origin + window.location.pathname;
+        const url = `${base}?mesa=${encodeURIComponent(String(mesa.numero))}`;
+        window.open(url, '_blank');
+      } catch (e) {
+        // fallback: open in same tab
+        onOpenTable(String(mesa.numero));
+      }
+    })();
   };
 
   return (

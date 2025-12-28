@@ -1,0 +1,32 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* default app background (fallback to a dark tone to avoid white borders) */
+/* No global background here — pages/components set their own backgrounds */
+
+/* Improve mobile responsiveness defaults */
+* { box-sizing: border-box; }
+
+@media (max-width: 640px) {
+  body { -webkit-font-smoothing: antialiased; }
+}
+
+/* Mobile-friendly overrides */
+@media (max-width: 640px) {
+  .max-w-6xl, .max-w-4xl, .max-w-2xl, .max-w-3xl { max-width: 100% !important; padding-left: 12px !important; padding-right: 12px !important; }
+  .p-8 { padding: 1rem !important; }
+  .p-6 { padding: 0.75rem !important; }
+  .px-6 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  .px-8 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  .h-32 { height: 6rem !important; }
+  .min-h-\[60vh\] { min-height: 50vh !important; }
+  .rounded-t-3xl { border-top-left-radius: 1rem !important; border-top-right-radius: 1rem !important; }
+  .shadow-2xl { box-shadow: 0 6px 18px rgba(2,6,23,0.3) !important; }
+  .meu-pedido-btn { min-width: 160px !important; padding-left: 1rem !important; padding-right: 1rem !important; }
+  .meu-pedido-btn .text-xs { font-size: 0.7rem !important; }
+  /* Reduce large gaps on mobile sticky footer */
+  .fixed.bottom-0 .max-w-6xl.mx-auto.p-6 { padding: 0.75rem !important; gap: 0.5rem !important; }
+}
