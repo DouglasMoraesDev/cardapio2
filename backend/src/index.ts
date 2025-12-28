@@ -12,6 +12,8 @@ import garconsRouter from './routes/garcons';
 import statsRouter from './routes/stats';
 import pedidosRouter from './routes/pedidos';
 import mesasRouter from './routes/mesas';
+import notificationsRouter from './routes/notifications';
+import avaliacoesRouter from './routes/avaliacoes';
 
 dotenv.config();
 
@@ -31,6 +33,8 @@ app.use('/api/garcons', garconsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/mesas', mesasRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/avaliacoes', avaliacoesRouter);
 
 // Health check para plataformas de deploy
 app.get('/_health', (_req, res) => res.status(200).json({ status: 'ok' }));

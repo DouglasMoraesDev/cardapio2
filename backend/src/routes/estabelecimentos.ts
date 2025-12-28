@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../prismaClient';
 import verificarToken from '../middleware/auth';
+import { broadcast } from '../notifications';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'troque_esta_chave_em_producao';
@@ -93,6 +94,7 @@ router.put('/me', verificarToken, async (req, res) => {
 
     try {
       const updated = await prisma.estabelecimento.update({ where: { id: estabelecimentoId }, data });
+      try { broadcast('estabelecimento_updated', updated); } catch (e) { console.warn('Erro ao broadcast estabelecimento_updated', e); }
       return res.json(updated);
     } catch (err: any) {
       // log detalhado para debugging

@@ -1,8 +1,8 @@
 
 import { RegistrationState } from '../types';
 
-// default to backend dev port 4001 if API_URL not provided
-const API_BASE = (process.env.API_URL || 'http://localhost:4001').replace(/\/$/, '');
+// Prefer Vite env `VITE_API_URL`; default to backend dev port 4000
+const API_BASE = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
 
 const TOKEN_KEY = 'gm_token';
 const ESTAB_KEY = 'gm_estabelecimentoId';
@@ -70,7 +70,7 @@ export const api = {
       id: p.id,
       name: p.nome ?? p.name,
       price: p.preco ?? p.price,
-      category: p.categoria ?? p.category,
+      category: p.categoria?.nome ?? p.categoria ?? p.category ?? null,
       description: p.descricao ?? p.description,
       imagem_url: p.imagem_url ?? p.imagemUrl ?? p.imageUrl ?? null,
     }));
@@ -149,6 +149,33 @@ export const api = {
     return fetchJson(url);
   },
 
+  async getMesas(estabelecimentoId: number, aberta?: boolean) {
+    const qs = new URLSearchParams({ estabelecimentoId: String(estabelecimentoId) });
+    if (typeof aberta === 'boolean') qs.set('aberta', aberta ? 'true' : 'false');
+    const url = `${API_BASE}/api/mesas?${qs.toString()}`;
+    return fetchJson(url);
+  },
+
+  async closeMesa(mesaIdOrNumero: number | string, taxaPaga: boolean) {
+    const url = `${API_BASE}/api/mesas/${mesaIdOrNumero}/fechar`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taxaPaga }) });
+  },
+
+  async updateItem(itemId: number, quantidade: number) {
+    const url = `${API_BASE}/api/pedidos/itens/${itemId}`;
+    return fetchJson(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantidade }) });
+  },
+
+  async deleteItem(itemId: number) {
+    const url = `${API_BASE}/api/pedidos/itens/${itemId}`;
+    return fetchJson(url, { method: 'DELETE' });
+  },
+
+  async updateOrderStatus(pedidoId: number, status: string) {
+    const url = `${API_BASE}/api/pedidos/${pedidoId}/status`;
+    return fetchJson(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+  },
+
   // --- Stats ---
   async getDailyStats(estabelecimentoId: number) {
     const url = `${API_BASE}/api/stats/daily?estabelecimentoId=${estabelecimentoId}`;
@@ -186,6 +213,22 @@ export const api = {
   async requestBill(estabelecimentoId: number, mesaId: number) {
     const url = `${API_BASE}/api/mesas/${mesaId}/fechar`;
     return fetchJson(url, { method: 'POST' });
+  }
+  ,
+  async callWaiter(estabelecimentoId: number, mesaIdOrNumero: number | string) {
+    const url = `${API_BASE}/api/mesas/${mesaIdOrNumero}/chamar`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estabelecimentoId }) });
+  }
+  ,
+  async createAvaliacao(data: { estrelas: number; comentario?: string; mesaId?: number | string; pedidoId?: number | string; estabelecimentoId?: number }) {
+    const url = `${API_BASE}/api/avaliacoes`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+
+  async getAvaliacoes(estabelecimentoId?: number) {
+    const qs = estabelecimentoId ? `?estabelecimentoId=${estabelecimentoId}` : '';
+    const url = `${API_BASE}/api/avaliacoes${qs}`;
+    return fetchJson(url);
   }
 };
 

@@ -77,11 +77,39 @@ model Mesa {
   id               Int    @id @default(autoincrement())
   numero           String
   aberta           Boolean @default(true)
+  taxaPaga         Boolean @default(false)
+  fechadaEm        DateTime?
   estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
   estabelecimentoId Int
   pedidos          Pedido[]
   criadoEm         DateTime @default(now())
 }
+
+model Notification {
+  id                 Int      @id @default(autoincrement())
+  tipo               String
+  referenciaId       Int?
+  mesaId             Int?
+  pedidoId           Int?
+  titulo             String?
+  body               String?
+  atendido           Boolean  @default(false)
+  atendidoPorGarcomId Int?
+  atendidoEm         DateTime?
+  criadoEm           DateTime @default(now())
+  estabelecimentoId  Int?
+}
+
+model Avaliacao {
+  id               Int      @id @default(autoincrement())
+  estrelas         Int
+  comentario       String?  @db.Text
+  mesaId           Int?
+  pedidoId         Int?
+  criadoEm         DateTime @default(now())
+  estabelecimentoId Int?
+}
+ 
 
 model Pedido {
   id               Int    @id @default(autoincrement())

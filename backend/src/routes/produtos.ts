@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
   const estabelecimentoId = estabelecimentoIdQuery || estabelecimentoIdToken;
   if (!estabelecimentoId) return res.status(400).json({ error: 'estabelecimentoId é obrigatório' });
   try {
-    const produtos = await prisma.produto.findMany({ where: { estabelecimentoId } });
+    const produtos = await prisma.produto.findMany({ where: { estabelecimentoId }, include: { categoria: true } });
     return res.json(produtos);
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -44,7 +44,7 @@ router.get('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'id inválido' });
   try {
-    const produto = await prisma.produto.findUnique({ where: { id } });
+    const produto = await prisma.produto.findUnique({ where: { id }, include: { categoria: true } });
     if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
     return res.json(produto);
   } catch (e) {

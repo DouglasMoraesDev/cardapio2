@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useEffect } from 'react';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SuccessScreen } from './components/SuccessScreen';
 import { Header } from './components/Header';
@@ -41,6 +42,18 @@ const App: React.FC = () => {
     setActiveTable(tableNumber);
     setView('menu');
   };
+
+  // If opened with ?mesa= in URL, auto-open menu for that mesa
+  useEffect(() => {
+    try {
+      const qp = new URLSearchParams(window.location.search);
+      const mesa = qp.get('mesa');
+      if (mesa) {
+        setActiveTable(mesa);
+        setView('menu');
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

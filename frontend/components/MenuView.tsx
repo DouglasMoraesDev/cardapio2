@@ -20,6 +20,10 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingStars, setRatingStars] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState<string>('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   // Carrega produtos do "backend" ao montar o componente
   useEffect(() => {
@@ -33,6 +37,45 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
         }
         const data = await api.getProducts(estabId);
         setProducts(data);
+        // carregar conta atual se abrir via mapa de mesas (localStorage) ou buscar mesa no servidor
+        try {
+          const cm = localStorage.getItem('gm_current_mesa');
+          let mesaObj: any = null;
+          if (cm) {
+            mesaObj = JSON.parse(cm);
+          } else {
+            // tentar buscar mesa pelo query param `mesa` (caso a guia tenha sido aberta com ?mesa=)
+            try {
+              const qp = new URLSearchParams(window.location.search);
+              const mesaParam = qp.get('mesa');
+              if (mesaParam) {
+                const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                const mesas = await api.getMesas(estabId);
+                mesaObj = (mesas || []).find((m:any) => String(m.numero) === String(mesaParam) || String(m.id) === String(mesaParam));
+                if (mesaObj) {
+                  try { localStorage.setItem('gm_current_mesa', JSON.stringify(mesaObj)); } catch (e) {}
+                }
+              }
+            } catch (e) {
+              console.warn('Erro ao buscar mesa por query param', e);
+            }
+          }
+          if (mesaObj) {
+            const itensFromMesa: any[] = [];
+            (mesaObj.pedidos || []).forEach((p:any) => {
+              (p.itens || []).forEach((it:any) => itensFromMesa.push({ produtoId: it.produtoId, quantidade: it.quantidade }));
+            });
+            if (itensFromMesa.length > 0) {
+              const agg: Record<number, number> = {};
+              itensFromMesa.forEach(i => { agg[i.produtoId] = (agg[i.produtoId] || 0) + i.quantidade; });
+              const account: CartItem[] = Object.keys(agg).map(pid => {
+                const prod = data.find(p => p.id === Number(pid));
+                return { ...(prod || { id: Number(pid), name: 'Produto', price: 0 }), quantity: agg[Number(pid)] } as CartItem;
+              });
+              setAccountItems(account);
+            }
+          }
+        } catch (e) { console.error('Erro ao carregar conta da mesa', e); }
       } catch (error) {
         console.error("Erro ao carregar cardápio", error);
       } finally {
@@ -40,9 +83,12 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
       }
     };
     loadData();
+    return () => {
+      try { localStorage.removeItem('gm_current_mesa'); } catch (e) {}
+    };
   }, []);
 
-  const categories = ['Todas', ...new Set(products.map(p => p.category))];
+  const categories = ['Todas', ...Array.from(new Set(products.map(p => p.category ?? 'Sem Categoria')) )];
 
   const handleAddToCart = (product: Product) => {
     setCartItems(prev => {
@@ -69,8 +115,10 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
   const sendOrderToKitchen = async () => {
     try {
       setIsLoading(true);
-      const res = await api.sendOrder(tableNumber, cartItems);
-      if (res.success) {
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      const itens = cartItems.map(ci => ({ produtoId: ci.id, quantidade: ci.quantity }));
+      const res = await api.sendOrder(estabId, tableNumber, itens);
+      if (res && res.sucesso) {
         setAccountItems(prev => {
           const updatedAccount = [...prev];
           cartItems.forEach(cartItem => {
@@ -96,9 +144,14 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
   const requestBill = async () => {
     try {
       setIsLoading(true);
-      await api.requestBill(tableNumber);
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      await api.requestBill(estabId, Number(tableNumber));
       alert('Solicitação de fechamento enviada!');
       setIsAccountOpen(false);
+      // abrir modal de avaliação
+      setRatingStars(5);
+      setRatingComment('');
+      setShowRatingModal(true);
     } catch (e) {
       alert("Erro ao solicitar conta");
     } finally {
@@ -106,8 +159,60 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
     }
   };
 
+  const submitRating = async () => {
+    try {
+      setSubmittingRating(true);
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      await api.createAvaliacao({ estrelas: ratingStars, comentario: ratingComment || undefined, mesaId: Number(tableNumber), estabelecimentoId: estabId });
+      setShowRatingModal(false);
+      alert('Obrigado pela sua avaliação!');
+    } catch (e) {
+      console.error('Erro ao enviar avaliação', e);
+      alert('Erro ao enviar avaliação');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
   const cartTotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const accountTotal = accountItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const [establishment, setEstablishment] = useState<any>(null);
+  const [taxaServico, setTaxaServico] = useState<number>(0);
+
+  useEffect(() => {
+    let es: EventSource | null = null;
+    const loadEstab = async () => {
+      try {
+        const est = await api.getEstablishment();
+        if (est) {
+          setEstablishment(est);
+          setTaxaServico(Number(est.taxa_servico || 0));
+        }
+      } catch (e) { /* ignore */ }
+    };
+    loadEstab();
+    try {
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      const base = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+      es = new EventSource(`${base}/api/notifications/stream?estabelecimentoId=${estabId}`);
+      es.addEventListener('estabelecimento_updated', (ev: any) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          setEstablishment(payload);
+          setTaxaServico(Number(payload.taxa_servico || 0));
+        } catch (e) { console.warn('Erro ao processar estabelecimento_updated', e); }
+      });
+    } catch (e) { /* ignore */ }
+    return () => { try { if (es) es.close(); } catch (e) {} };
+  }, []);
+
+  const totalWithTax = (amount: number) => {
+    const t = Number(taxaServico || 0);
+    return amount + (amount * (t / 100));
+  };
 
   if (isLoading && products.length === 0) {
     return (
@@ -118,68 +223,106 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
     );
   }
 
+  const primaryColor = establishment?.tema_cor_primaria || '#0f172a';
+  const cardBg = establishment?.tema_fundo_cartoes || '#ffffff';
+  const textColor = establishment?.tema_cor_texto || undefined;
+  const accentColor = establishment?.tema_cor_destaque || '#f59e0b';
+  const placeholderBg = (establishment?.tema_fundo_cartoes && establishment.tema_fundo_cartoes !== '#ffffff') ? 'rgba(255,255,255,0.04)' : '#f3f4f6';
+  const cardBorder = (establishment?.tema_fundo_cartoes && establishment.tema_fundo_cartoes !== '#ffffff') ? 'rgba(255,255,255,0.08)' : '#e6e6e6';
+
   return (
-    <div className="w-full max-w-2xl bg-slate-50 min-h-[80vh] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden">
+    <div style={{ backgroundColor: establishment?.tema_fundo_geral || undefined, color: textColor }} className="w-full min-h-screen flex justify-center">
+      <div className="w-full max-w-6xl min-h-[80vh] px-6 lg:px-12 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden" style={{ color: textColor }}>
       {/* Header */}
-      <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-30 shadow-sm rounded-t-2xl">
+      <div style={{ backgroundColor: cardBg, color: textColor }} className="px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm rounded-t-2xl">
         <div className="flex items-center gap-3">
            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
            </button>
-           <h1 className="text-xl font-black text-slate-800">Mesa {tableNumber}</h1>
+           <h1 className="text-xl font-black" style={{ color: textColor || '#0f172a' }}>Mesa {tableNumber}</h1>
         </div>
-        <button onClick={onBack} className="text-red-500 font-bold text-sm hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors">
-          Sair
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="font-bold text-sm hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors" style={{ color: textColor || '#ef4444' }}>
+            Sair
+          </button>
+          <button onClick={async () => {
+            try {
+              const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+              await api.callWaiter(estabId, tableNumber);
+              alert('Garçom chamado.');
+            } catch (e) { console.error(e); alert('Erro ao chamar garçom'); }
+          }} className="px-3 py-1.5 rounded-lg font-bold text-sm" style={{ backgroundColor: accentColor, color: '#fff' }}>Chamar Garçom</button>
+          <button onClick={() => { setIsAccountOpen(true); setIsCartOpen(false); }} className="px-3 py-1.5 rounded-lg font-bold text-sm" style={{ backgroundColor: primaryColor, color: textColor || '#fff' }}>Conta</button>
+        </div>
       </div>
 
       <div className="p-6 flex-grow pb-40">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6">Qual será a pedida de hoje?</h2>
-        
+        <h2 className="text-2xl font-bold mb-4">Qual será a pedida de hoje?</h2>
+
+        {/* Search */}
+        <div className="mb-4">
+          <div className="w-full max-w-full">
+            <div className="relative">
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Qual será a pedida de hoje?" className="w-full rounded-full px-4 py-3 bg-transparent border" style={{ borderColor: cardBorder, color: textColor }} />
+              <div className="absolute left-3 top-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={textColor || '#94a3b8'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-          {categories.map(cat => (
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide justify-center">
+          {categories.map((cat, idx) => (
             <button
-              key={cat}
+              key={`${cat ?? 'sem'}-${idx}`}
               onClick={() => setActiveCategory(cat)}
-              className={`px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-all ${
-                activeCategory === cat 
-                ? 'bg-slate-900 text-white shadow-lg' 
-                : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'
-              }`}
+              className={`px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-all`}
+              style={activeCategory === cat ? { backgroundColor: primaryColor, color: textColor || '#fff', boxShadow: '0 8px 24px rgba(2,6,23,0.4)' } : { backgroundColor: cardBg, color: textColor ? textColor : '#94a3b8', border: `1px solid ${cardBorder}` }}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">{activeCategory}</h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {products
-              .filter(p => activeCategory === 'Todas' || p.category === activeCategory)
-              .map(product => (
-                <div key={product.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-start gap-4">
-                  <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-2xl">
-                    {product.category === 'Cerveja' ? '🍺' : '🍴'}
-                  </div>
-                  <div className="flex-grow">
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-black text-slate-800 text-lg leading-tight uppercase">{product.name}</h4>
-                      <span className="font-black text-emerald-600 whitespace-nowrap">R$ {product.price.toFixed(2)}</span>
+        <div className="space-y-6">
+          {Array.from(new Set(products.map(p => p.category || 'Sem Categoria'))).map((cat) => {
+            const list = products.filter(p => (cat === 'Sem Categoria' ? (p.category === null || p.category === undefined) : p.category === cat) && (activeCategory === 'Todas' || activeCategory === cat) && (String(p.name).toLowerCase().includes(searchQuery.toLowerCase()) || String(p.description || '').toLowerCase().includes(searchQuery.toLowerCase())));
+            if (!list || list.length === 0) return null;
+            return (
+              <div key={cat}>
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-3">{cat}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {list.map(product => (
+                    <div key={product.id} className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition relative" style={{ backgroundColor: 'transparent' }}>
+                      <div className="w-full h-32 overflow-hidden">
+                        {product.imagem_url ? (
+                          <img src={product.imagem_url} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-4xl" style={{ backgroundColor: placeholderBg }}>{product.category === 'Cerveja' ? '🍺' : '🍽️'}</div>
+                        )}
+                      </div>
+                      <div className="px-4 py-4" style={{ backgroundColor: cardBg, color: textColor, borderTop: `1px solid ${cardBorder}` }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="font-black text-base leading-tight" style={{ color: textColor }}>{product.name}</h4>
+                            <p className="text-xs mt-1" style={{ color: textColor ? textColor : '#94a3b8' }}>{product.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-black text-emerald-500">R$ {Number(product.price).toFixed(2)}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <button onClick={() => handleAddToCart(product)} className="py-2 px-3 rounded-md font-bold text-sm" style={{ backgroundColor: primaryColor, color: textColor || '#fff' }}>Adicionar</button>
+                          <button onClick={() => setCartItems(prev => [{ ...(product as any), quantity: 1 }, ...prev])} className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{ backgroundColor: accentColor, color: '#fff' }}>+</button>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{product.description}</p>
-                    <button 
-                      onClick={() => handleAddToCart(product)}
-                      className="mt-3 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 rounded-xl text-xs transition-colors"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -188,10 +331,32 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[40] animate-in fade-in duration-300" onClick={() => { setIsCartOpen(false); setIsAccountOpen(false); }} />
       )}
 
+      {/* Rating Modal Overlay */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/60 z-40" onClick={() => { if (!submittingRating) setShowRatingModal(false); }} />
+          <div className="rounded-2xl shadow-2xl p-6 z-50 max-w-md w-full mx-4" style={{ backgroundColor: cardBg, color: textColor }}>
+            <h3 className="text-xl font-bold mb-4">Avalie sua experiência</h3>
+            <div className="flex items-center gap-2 mb-4">
+              {[1,2,3,4,5].map((s) => (
+                <button key={s} onClick={() => setRatingStars(s)} className={`text-3xl ${ratingStars >= s ? 'text-yellow-400' : 'text-slate-300'}`}>
+                  ★
+                </button>
+              ))}
+            </div>
+            <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)} placeholder="Comentário (opcional)" className="w-full px-4 py-3 border rounded-xl mb-4" style={{ backgroundColor: placeholderBg, color: textColor }} />
+            <div className="flex gap-3">
+              <button disabled={submittingRating} onClick={submitRating} className="flex-1 py-3 rounded-xl font-bold" style={{ backgroundColor: primaryColor, color: textColor || '#fff' }}>{submittingRating ? 'Enviando...' : 'Enviar Avaliação'}</button>
+              <button disabled={submittingRating} onClick={() => setShowRatingModal(false)} className="px-6 py-3 rounded-xl" style={{ backgroundColor: cardBg, border: `1px solid ${cardBorder}`, color: textColor || '#111' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cart Drawer */}
-      <div className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-[2.5rem] z-[50] transition-transform duration-500 shadow-2xl ${isCartOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+      <div className={`fixed bottom-0 left-0 right-0 rounded-t-[2.5rem] z-[50] transition-transform duration-500 shadow-2xl ${isCartOpen ? 'translate-y-0' : 'translate-y-full'}`} style={{ backgroundColor: cardBg, color: textColor }}>
         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-4 mb-2" />
-        <div className="p-8 max-w-2xl mx-auto">
+        <div className="p-8 max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-2xl font-black text-slate-900">Pedido</h3>
             <button onClick={() => setIsCartOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600">
@@ -206,34 +371,35 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
               </div>
             ) : (
               <div className="space-y-6">
-                {cartItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white font-bold">{item.quantity}</div>
-                      <div>
-                        <p className="font-black text-slate-800 uppercase text-sm">{item.name}</p>
-                        <p className="text-xs text-emerald-600 font-bold">R$ {(item.price * item.quantity).toFixed(2)}</p>
+                    {cartItems.map(item => (
+                      <div key={item.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold" style={{ backgroundColor: primaryColor, color: '#fff' }}>{item.quantity}</div>
+                          <div>
+                            <p className="font-black uppercase text-sm" style={{ color: textColor }}>{item.name}</p>
+                            <p className="text-xs font-bold" style={{ color: '#10b981' }}>R$ {(item.price * item.quantity).toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 p-1 rounded-xl" style={{ backgroundColor: cardBg }}>
+                          <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg" style={{ backgroundColor: cardBg, border: `1px solid ${cardBorder}`, color: textColor }}>-</button>
+                          <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg" style={{ backgroundColor: cardBg, border: `1px solid ${cardBorder}`, color: textColor }}>+</button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-                      <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm">-</button>
-                      <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm">+</button>
-                    </div>
-                  </div>
-                ))}
+                    ))}
               </div>
             )}
           </div>
           {cartItems.length > 0 && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center py-4 border-t border-slate-100">
+              <div className="flex justify-between items-center py-4" style={{ borderTop: `1px solid ${cardBorder}` }}>
                 <span className="font-bold text-slate-400 uppercase text-xs tracking-widest">Total do Pedido</span>
                 <span className="text-3xl font-black text-slate-900">R$ {cartTotal.toFixed(2)}</span>
               </div>
               <button 
                 disabled={isLoading}
                 onClick={sendOrderToKitchen}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl shadow-2xl transition-all text-lg disabled:opacity-50"
+                className="w-full font-black py-5 rounded-2xl shadow-2xl transition-all text-lg disabled:opacity-50"
+                style={{ backgroundColor: primaryColor, color: textColor || '#fff' }}
               >
                 {isLoading ? 'Enviando...' : 'Enviar Pedido'}
               </button>
@@ -243,9 +409,9 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
       </div>
 
       {/* Account Drawer */}
-      <div className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-[2.5rem] z-[50] transition-transform duration-500 shadow-2xl ${isAccountOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+      <div className={`fixed bottom-0 left-0 right-0 rounded-t-[2.5rem] z-[50] transition-transform duration-500 shadow-2xl ${isAccountOpen ? 'translate-y-0' : 'translate-y-full'}`} style={{ backgroundColor: cardBg, color: textColor }}>
         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-4 mb-2" />
-        <div className="p-8 max-w-2xl mx-auto">
+        <div className="p-8 max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-2xl font-black text-slate-900">Minha Conta</h3>
             <button onClick={() => setIsAccountOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600">
@@ -275,17 +441,23 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
               </div>
             )}
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center py-4 border-t border-slate-100">
+            <div className="space-y-4">
+            <div className="flex justify-between items-center py-4" style={{ borderTop: `1px solid ${cardBorder}` }}>
+                <div>
+                <span className="font-bold uppercase text-[10px] tracking-widest block mb-1" style={{ color: textColor || '#94a3b8' }}>Total (sem taxa)</span>
+                <span className="text-lg font-bold" style={{ color: textColor }}>{`R$ ${accountTotal.toFixed(2)}`}</span>
+                <div className="text-xs" style={{ color: textColor || '#94a3b8' }}>Taxa de serviço: {taxaServico}%</div>
+              </div>
               <div>
-                <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest block mb-1">Total a Pagar</span>
-                <span className="text-3xl font-black text-emerald-600">R$ {accountTotal.toFixed(2)}</span>
+                <span className="font-bold uppercase text-[10px] tracking-widest block mb-1" style={{ color: textColor || '#94a3b8' }}>Total com taxa</span>
+                <span className="text-3xl font-black" style={{ color: '#10b981' }}>R$ {totalWithTax(accountTotal).toFixed(2)}</span>
               </div>
             </div>
             <button 
               disabled={accountTotal === 0 || isLoading}
               onClick={requestBill}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white font-black py-5 rounded-2xl shadow-2xl transition-all text-lg flex items-center justify-center gap-3"
+              className="w-full font-black py-5 rounded-2xl shadow-2xl transition-all text-lg flex items-center justify-center gap-3"
+              style={{ backgroundColor: primaryColor, color: textColor || '#fff' }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7h-9m3 3-3-3 3-3M4 17h9m-3-3 3 3-3 3"/></svg>
               {isLoading ? 'Processando...' : 'Pedir Fechamento (Trazer Conta)'}
@@ -296,28 +468,24 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
 
       {/* Sticky Footer */}
       <div className="fixed bottom-0 left-0 right-0 z-20">
-        <div className="max-w-2xl mx-auto bg-slate-900 text-white p-6 rounded-t-3xl shadow-2xl">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-xs">👤</div>
-              <span className="text-xs font-bold text-slate-400">Garçom: <span className="text-white">{waiterName}</span></span>
+        <div className="max-w-6xl mx-auto p-6 rounded-t-3xl shadow-2xl flex items-center justify-center gap-6" style={{ backgroundColor: 'transparent', color: textColor || '#fff' }}>
+          <button onClick={async () => { try { const estabId = Number(localStorage.getItem('gm_estabelecimentoId')||0); await api.callWaiter(estabId, tableNumber); alert('Garçom chamado.'); } catch(e){ alert('Erro ao chamar garçom'); } }} className="w-16 h-16 rounded-full flex items-center justify-center flex-col font-bold" style={{ backgroundColor: cardBg, color: textColor, border: `1px solid ${cardBorder}` }}>
+            <div className="text-sm">GARÇOM</div>
+          </button>
+
+          <button onClick={() => { setIsCartOpen(true); setIsAccountOpen(false); }} className="px-8 py-4 rounded-full flex flex-col items-center justify-center shadow-2xl" style={{ backgroundColor: accentColor, color: '#fff', minWidth: 360 }}>
+            <div className="flex items-center gap-3 font-black">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v18H3z"/></svg>
+              <div>MEU PEDIDO</div>
             </div>
-            <button onClick={() => { setIsCartOpen(true); setIsAccountOpen(false); }} className={`text-xs font-black uppercase transition-all flex items-center gap-1 px-3 py-1.5 rounded-full ${isCartOpen ? 'bg-orange-500 text-white' : 'text-orange-400 hover:text-orange-300'}`}>
-              Meu Pedido
-              <div className="ml-1 w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-[10px]">{cartItems.length}</div>
-            </button>
-          </div>
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Total Atual</p>
-              <h4 className="text-2xl font-black">R$ {(cartTotal + accountTotal).toFixed(2)}</h4>
-            </div>
-            <button onClick={() => { setIsAccountOpen(true); setIsCartOpen(false); }} className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black text-sm transition-all shadow-lg flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              Conta
-            </button>
-          </div>
+            <div className="text-xs mt-1">Total: R$ {accountTotal.toFixed(2)}</div>
+          </button>
+
+          <button onClick={() => { setIsAccountOpen(true); setIsCartOpen(false); }} className="w-16 h-16 rounded-full flex items-center justify-center flex-col font-bold" style={{ backgroundColor: cardBg, color: textColor, border: `1px solid ${cardBorder}` }}>
+            <div className="text-sm">CONTA</div>
+          </button>
         </div>
+      </div>
       </div>
     </div>
   );

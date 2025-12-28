@@ -39,6 +39,15 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   ];
 
   const [stats, setStats] = useState<any>(null);
+  const [avaliacoes, setAvaliacoes] = useState<Array<any>>([]);
+  const [starFilter, setStarFilter] = useState<number | null>(null);
+  const [mesasAbertas, setMesasAbertas] = useState<Array<any>>([]);
+  const [mesasFechadas, setMesasFechadas] = useState<Array<any>>([]);
+  const [isLoadingMesas, setIsLoadingMesas] = useState(false);
+  const [sseEnabled, setSseEnabled] = useState<boolean>(() => { try { return (localStorage.getItem('gm_admin_sse_enabled') || 'true') === 'true'; } catch (e) { return true; } });
+  const [sseStatus, setSseStatus] = useState<'disconnected'|'connecting'|'connected'|'error'>('disconnected');
+  const eventSourceRef = React.useRef<EventSource | null>(null);
+  const [pollInterval, setPollInterval] = useState<number>(() => { try { return Number(localStorage.getItem('gm_admin_poll_interval') || '8000'); } catch (e) { return 8000; } });
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState<any>(null);
 
@@ -59,35 +68,7 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Receita Total</p>
-          <h4 className="text-2xl font-black text-slate-900">R$ 1262.96</h4>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative group cursor-pointer">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Taxa de Serviço (Total)</p>
-          <h4 className="text-2xl font-black text-orange-600">R$ 106.09</h4>
-          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            Clique para ver detalhes das mesas que pagaram
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pedidos</p>
-          <h4 className="text-2xl font-black text-slate-900">10</h4>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative group cursor-pointer" onClick={() => setActiveTab('avaliacoes')}>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">NPS Médio</p>
-          <div className="flex items-center gap-2">
-            <h4 className="text-2xl font-black text-slate-900">0.0</h4>
-            <span className="text-yellow-400 text-xl">★</span>
-          </div>
-          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            Clique para ver avaliações recentes
-          </p>
-        </div>
-      </div>
+      {/* Resumo financeiro removido da tela inicial. Dados serão carregados somente ao abrir a aba "Financeiro". */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl shadow-slate-200 overflow-hidden relative">
@@ -121,6 +102,95 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   const openModal = (title: string, body: any) => {
     setModalContent({ title, body });
     setModalOpen(true);
+  };
+
+  const fetchMesas = async (aberta?: boolean) => {
+    try {
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      const res = await api.getMesas(estabId, aberta);
+      return res || [];
+    } catch (e) {
+      console.error('Erro ao carregar mesas', e);
+      return [];
+    }
+  };
+
+  const startSSE = () => {
+    if (eventSourceRef.current) return;
+    setSseStatus('connecting');
+    const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+    const base = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+    const url = `${base}/api/notifications/stream?estabelecimentoId=${estabId}`;
+    try {
+      const es = new EventSource(url);
+      es.addEventListener('pedido_created', () => {
+        // refresh open mesas
+        fetchMesas(true).then(r => setMesasAbertas(r || [])).catch(() => {});
+      });
+      es.addEventListener('pedido_updated', () => {
+        fetchMesas(true).then(r => setMesasAbertas(r || [])).catch(() => {});
+        fetchMesas(false).then(r => setMesasFechadas(r || [])).catch(() => {});
+      });
+      es.addEventListener('mesa_fechamento_solicitado', () => {
+        fetchMesas(true).then(r => setMesasAbertas(r || [])).catch(() => {});
+        fetchMesas(false).then(r => setMesasFechadas(r || [])).catch(() => {});
+      });
+      es.addEventListener('garcom_chamado', () => {
+        fetchMesas(true).then(r => setMesasAbertas(r || [])).catch(() => {});
+      });
+      es.addEventListener('avaliacao_created', (ev: any) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          setAvaliacoes(prev => [payload, ...prev]);
+        } catch (e) { console.warn('Erro ao processar avaliacao_created SSE', e); }
+      });
+      es.onerror = (err) => { console.warn('Admin SSE error', err); setSseStatus('error'); };
+      es.onopen = () => { setSseStatus('connected'); };
+      eventSourceRef.current = es;
+    } catch (e) {
+      console.warn('Falha ao iniciar SSE admin', e);
+      setSseStatus('error');
+    }
+  };
+
+  const stopSSE = () => {
+    if (eventSourceRef.current) {
+      try { eventSourceRef.current.close(); } catch (e) {}
+      eventSourceRef.current = null;
+    }
+    setSseStatus('disconnected');
+  };
+
+  const updateItem = async (itemId: number, quantidade: number) => {
+    try {
+      const res = await api.updateItem(itemId, quantidade);
+      // atualizar modal e listas
+      if (modalContent && modalContent.type === 'mesa-details') {
+        const mesa = modalContent.mesa;
+        const updatedMesa = await fetchMesas();
+        setMesasAbertas(updatedMesa.filter((m:any) => m.aberta));
+        setMesasFechadas(updatedMesa.filter((m:any) => !m.aberta));
+        // atualizar modal para refletir mudança
+        const found = (await api.getMesas(Number(localStorage.getItem('gm_estabelecimentoId') || 0))).find((m:any) => m.id === mesa.id);
+        setModalContent({ type: 'mesa-details', mesa: found });
+      }
+      return res;
+    } catch (e) { console.error(e); throw e; }
+  };
+
+  const removeItem = async (itemId: number) => {
+    try {
+      const res = await api.deleteItem(itemId);
+      const mesa = modalContent?.mesa;
+      const updatedMesaList = await fetchMesas();
+      setMesasAbertas(updatedMesaList.filter((m:any) => m.aberta));
+      setMesasFechadas(updatedMesaList.filter((m:any) => !m.aberta));
+      if (mesa) {
+        const found = updatedMesaList.find((m:any) => m.id === mesa.id);
+        setModalContent({ type: 'mesa-details', mesa: found });
+      }
+      return res;
+    } catch (e) { console.error(e); throw e; }
   };
 
   const renderFinanceiro = () => (
@@ -188,24 +258,42 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
         <h2 className="text-2xl font-bold text-slate-800">Gerenciar Mesas</h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border-2 border-orange-200 shadow-lg">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900">Mesa 25</h3>
-              <p className="text-sm font-medium text-orange-600 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                Status: Ocupada • Pedidos: 1
-              </p>
+        {mesasAbertas.map(mesa => {
+          const pedidosCount = mesa.pedidos?.length || 0;
+          const subtotal = (mesa.pedidos || []).reduce((acc:any, p:any) => acc + (p.total || 0), 0);
+          return (
+            <div key={mesa.id || mesa.numero} className="bg-white p-6 rounded-2xl border-2 border-orange-200 shadow-lg">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Mesa {mesa.numero}</h3>
+                  <p className="text-sm font-medium text-orange-600 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                    Status: {mesa.aberta ? 'Ocupada' : 'Fechada'} • Pedidos: {pedidosCount}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-8 pt-4 border-t border-slate-100">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Subtotal</p>
+                <h4 className="text-2xl font-black text-slate-900">R$ {Number(subtotal).toFixed(2)}</h4>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => { setModalContent({ type: 'mesa-details', mesa }); setModalOpen(true); }} className="flex-1 bg-white border border-slate-200 py-3 rounded-xl">Detalhes</button>
+                  <button onClick={async () => {
+                    try {
+                      const taxaPaga = confirm('Taxa de serviço foi paga? OK = Sim');
+                      await api.closeMesa(mesa.id ?? mesa.numero, taxaPaga);
+                      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                      const open = await api.getMesas(estabId, true);
+                      const closed = await api.getMesas(estabId, false);
+                      setMesasAbertas(open || []);
+                      setMesasFechadas(closed || []);
+                      alert('Mesa finalizada');
+                    } catch (e) { console.error(e); alert('Erro ao finalizar mesa'); }
+                  }} className="flex-1 bg-slate-900 text-white font-bold py-3 rounded-xl">Finalizar Mesa</button>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="mt-8 pt-4 border-t border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Subtotal</p>
-            <h4 className="text-2xl font-black text-slate-900">R$ 186.00</h4>
-            <button className="w-full mt-4 bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition-colors">
-              Finalizar Mesa
-            </button>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -248,6 +336,22 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
           setIsLoadingWaiters(false);
         }
       }
+      if (activeTab === 'mesas') {
+        setIsLoadingMesas(true);
+        try {
+          const open = await fetchMesas(true);
+          setMesasAbertas(open || []);
+        } catch (e) { console.error('Erro ao carregar mesas', e); }
+        finally { setIsLoadingMesas(false); }
+      }
+      if (activeTab === 'mesas-fechadas') {
+        setIsLoadingMesas(true);
+        try {
+          const closed = await fetchMesas(false);
+          setMesasFechadas(closed || []);
+        } catch (e) { console.error('Erro ao carregar mesas fechadas', e); }
+        finally { setIsLoadingMesas(false); }
+      }
       if (activeTab === 'financeiro') {
         try {
           const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
@@ -257,8 +361,33 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
           console.error('Erro ao carregar estatísticas', e);
         }
       }
+      if (activeTab === 'avaliacoes') {
+        try {
+          const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+          const res = await api.getAvaliacoes(estabId);
+          setAvaliacoes(res || []);
+        } catch (e) { console.error('Erro ao carregar avaliações', e); }
+      }
     };
     load();
+    let pollId: any = null;
+    // use SSE when enabled, otherwise fallback to polling with configurable interval
+    if (sseEnabled) {
+      startSSE();
+    } else if (activeTab === 'mesas' || activeTab === 'mesas-fechadas') {
+      pollId = setInterval(async () => {
+        try {
+          if (activeTab === 'mesas') {
+            const open = await fetchMesas(true);
+            setMesasAbertas(open || []);
+          } else {
+            const closed = await fetchMesas(false);
+            setMesasFechadas(closed || []);
+          }
+        } catch (e) { /* ignore */ }
+      }, Math.max(1000, Number(pollInterval || 8000)));
+    }
+    return () => { if (pollId) clearInterval(pollId); if (sseEnabled) stopSSE(); };
   }, [activeTab]);
 
   const renderCardapio = () => (
@@ -490,14 +619,36 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   );
 
   const renderAvaliacoes = () => (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <h2 className="text-2xl font-bold text-slate-800">Avaliações dos Clientes</h2>
-      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-slate-100 text-center shadow-sm">
-        <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mb-6">
-          <span className="text-yellow-400 text-5xl">★</span>
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStarFilter(null)} className={`px-3 py-1 rounded-full text-sm font-bold ${starFilter === null ? 'bg-slate-900 text-white' : 'bg-white border'}`}>Todas</button>
+            {[5,4,3,2,1].map(s => (
+              <button key={s} onClick={() => setStarFilter(s)} className={`px-3 py-1 rounded-full text-sm font-bold ${starFilter === s ? 'bg-yellow-400 text-white' : 'bg-white border'}`}>{'★'.repeat(s)}</button>
+            ))}
+          </div>
+          <div className="text-sm text-slate-500">Total: {avaliacoes.length}</div>
         </div>
-        <h3 className="text-4xl font-black text-slate-900 mb-2">0.0 NPS</h3>
-        <p className="text-slate-500">Nenhuma avaliação recebida até o momento.</p>
+        {avaliacoes.length === 0 ? (
+          <div className="text-center text-slate-500">Nenhuma avaliação recebida até o momento.</div>
+        ) : (
+          <div className="space-y-4">
+            {avaliacoes.filter(a => starFilter === null || Number(a.estrelas) === starFilter).map((a:any) => (
+              <div key={a.id || `${a.criadoEm}-${a.mesaId}-${a.estabelecimentoId}`} className="p-4 border rounded-lg">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="font-bold">{a.estabelecimentoId ? `Estab ${a.estabelecimentoId}` : ''} {a.mesaId ? `• Mesa ${a.mesaId}` : ''}</div>
+                  <div className="text-sm text-slate-400">{new Date(a.criadoEm).toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="text-yellow-400 font-black text-lg">{'★'.repeat(Math.max(0, Math.min(5, a.estrelas || 0)))}</div>
+                  <div className="text-sm text-slate-600">{a.comentario || ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -506,35 +657,34 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-slate-800">Mesas Finalizadas</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[
-          { mesa: '1', pedidos: 1, total: '36.14', clients: [{name: 'Cliente 1', sub: '31.98', serv: '4.16'}] },
-          { mesa: '101', pedidos: 1, total: '23.73', clients: [{name: 'Cliente 1', sub: '21.00', serv: '2.73'}] },
-          { mesa: '100', pedidos: 2, total: '341.00', clients: [{name: 'Cliente 1', sub: '124.00', serv: '12.40'}, {name: 'Cliente 2', sub: '186.00', serv: '18.60'}] },
-          { mesa: '30', pedidos: 2, total: '409.20', clients: [{name: 'Cliente 1', sub: '186.00', serv: '18.60'}, {name: 'Cliente 2', sub: '186.00', serv: '18.60'}] }
-        ].map((item, idx) => (
-          <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-black text-slate-900">Mesa {item.mesa}</h3>
-              <span className="text-xs font-bold text-slate-400 uppercase">Pedidos: {item.pedidos}</span>
-            </div>
-            <div className="flex-grow space-y-3 mb-6">
-              {item.clients.map((c, cidx) => (
-                <div key={cidx} className="flex justify-between text-sm py-2 border-b border-slate-50">
-                  <div>
-                    <p className="font-bold text-slate-800">{c.name}</p>
-                    <p className="text-[10px] text-slate-400">Serviço: R$ {c.serv}</p>
+        {mesasFechadas.map((mesa:any) => {
+          const pedidosCount = mesa.pedidos?.length || 0;
+          const total = (mesa.pedidos || []).reduce((acc:any, p:any) => acc + (p.total || 0), 0);
+          return (
+            <div key={mesa.id || mesa.numero} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-black text-slate-900">Mesa {mesa.numero}</h3>
+                <span className="text-xs font-bold text-slate-400 uppercase">Pedidos: {pedidosCount}</span>
+              </div>
+              <div className="flex-grow space-y-3 mb-6">
+                {(mesa.pedidos || []).map((p:any) => (
+                  <div key={p.id} className="flex justify-between text-sm py-2 border-b border-slate-50">
+                    <div>
+                      <p className="font-bold text-slate-800">Pedido #{p.id}</p>
+                      <p className="text-[10px] text-slate-400">Itens: {p.itens?.length || 0}</p>
+                    </div>
+                    <p className="font-black text-slate-900">R$ {Number(p.total).toFixed(2)}</p>
                   </div>
-                  <p className="font-black text-slate-900">R$ {c.sub}</p>
-                </div>
-              ))}
-            </div>
-            <div className="pt-4 mt-auto">
+                ))}
+              </div>
+              <div className="pt-4 mt-auto">
                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total</p>
-               <h4 className="text-2xl font-black text-emerald-600">R$ {item.total}</h4>
-               <p className="text-[10px] text-slate-400 italic mt-1">(Inclui taxa de serviço 10%)</p>
+               <h4 className="text-2xl font-black text-emerald-600">R$ {Number(total).toFixed(2)}</h4>
+               <p className="text-[10px] text-slate-400 italic mt-1">Taxa paga: {mesa.taxaPaga ? 'Sim' : 'Não'}</p>
             </div>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -586,6 +736,18 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                Sessão Administrativa •
              </div>
            </div>
+           <div className="ml-auto flex items-center gap-4">
+             <label className="text-sm text-slate-500 flex items-center gap-2">
+               <input type="checkbox" checked={sseEnabled} onChange={(e) => { const v = e.target.checked; setSseEnabled(v); try { localStorage.setItem('gm_admin_sse_enabled', String(v)); } catch (err) {} }} />
+               Usar SSE
+             </label>
+             <div className="text-sm text-slate-500">Polling (ms):</div>
+             <input value={String(pollInterval)} onChange={(e) => { const v = Number(e.target.value || 0); setPollInterval(v); try { localStorage.setItem('gm_admin_poll_interval', String(v)); } catch (err) {} }} className="w-20 px-2 py-1 border rounded text-sm" />
+             <div className="flex items-center gap-2">
+               <span className={`w-3 h-3 rounded-full ${sseStatus === 'connected' ? 'bg-emerald-500' : sseStatus === 'connecting' ? 'bg-yellow-400' : sseStatus === 'error' ? 'bg-red-500' : 'bg-slate-300'}`} title={`SSE: ${sseStatus}`} />
+               <div className="text-xs text-slate-400">{sseStatus === 'connected' ? 'SSE conectado' : sseStatus === 'connecting' ? 'SSE conectando' : sseStatus === 'error' ? 'SSE erro' : 'SSE off'}</div>
+             </div>
+           </div>
         </div>
       </div>
 
@@ -602,14 +764,52 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
       </div>
       {modalOpen && modalContent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-slate-900/60" onClick={() => setModalOpen(false)} />
-          <div className="bg-white rounded-2xl shadow-2xl p-6 z-60 max-w-3xl w-full mx-4">
+          <div className="absolute inset-0 bg-slate-900/60 z-40" onClick={() => setModalOpen(false)} />
+          <div className="bg-white rounded-2xl shadow-2xl p-6 z-50 max-w-3xl w-full mx-4 relative">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-xl font-bold">{modalContent.title}</h3>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600">Fechar</button>
             </div>
             <div className="space-y-4 text-sm text-slate-700">
-              <pre className="whitespace-pre-wrap text-xs bg-slate-50 p-4 rounded">{JSON.stringify(modalContent.body, null, 2)}</pre>
+              {modalContent.type === 'mesa-details' && modalContent.mesa ? (
+                <div>
+                  <h4 className="font-bold mb-3">Mesa {modalContent.mesa.numero}</h4>
+                  {(modalContent.mesa.pedidos || []).map((p:any) => (
+                    <div key={p.id} className="mb-4 border rounded p-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-bold">Pedido #{p.id}</div>
+                        <div className="text-sm text-slate-500">Total: R$ {Number(p.total).toFixed(2)}</div>
+                      </div>
+                      <div className="space-y-2">
+                        {(p.itens || []).map((it:any) => (
+                          <div key={it.id} className="flex items-center justify-between">
+                            <div>
+                              <div className="font-bold">{it.produtoId} (produto)</div>
+                              <div className="text-xs text-slate-400">R$ {Number(it.precoUnitario).toFixed(2)}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input defaultValue={it.quantidade} type="number" min={0} className="w-16 px-2 py-1 border rounded" id={`qty-${it.id}`} />
+                              <button onClick={async () => {
+                                const el = document.getElementById(`qty-${it.id}`) as HTMLInputElement | null;
+                                const q = el ? Number(el.value) : it.quantidade;
+                                try { await updateItem(it.id, q); alert('Item atualizado'); }
+                                catch (e) { alert('Erro ao atualizar item'); }
+                              }} className="px-3 py-1 bg-blue-500 text-white rounded">Salvar</button>
+                              <button onClick={async () => {
+                                if (!confirm('Remover item?')) return;
+                                try { await removeItem(it.id); alert('Item removido'); }
+                                catch (e) { alert('Erro ao remover item'); }
+                              }} className="px-3 py-1 bg-red-500 text-white rounded">Remover</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap text-xs bg-slate-50 p-4 rounded">{JSON.stringify(modalContent.body, null, 2)}</pre>
+              )}
             </div>
           </div>
         </div>
