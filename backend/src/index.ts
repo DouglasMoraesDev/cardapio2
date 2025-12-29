@@ -16,6 +16,7 @@ import notificationsRouter from './routes/notifications';
 import avaliacoesRouter from './routes/avaliacoes';
 
 dotenv.config();
+import { execSync } from 'child_process';
 
 const app = express();
 app.use(cors());
@@ -59,9 +60,26 @@ if (existing) {
 }
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Servidor backend rodando na porta ${PORT}`);
-  // eslint-disable-next-line no-console
-  console.log(`DATABASE_URL=${process.env.DATABASE_URL ? '[set]' : '[not set]'}`);
-});
+const shouldRunMigrations = (process.env.PRISMA_MIGRATE_ON_STARTUP === 'true') || (process.env.NODE_ENV === 'production');
+
+const start = async () => {
+  if (shouldRunMigrations) {
+    try {
+      console.log('PRISMA: running `prisma migrate deploy` before starting server');
+      execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+    } catch (err) {
+      console.error('PRISMA: migrate deploy failed', err);
+      // If migrations fail in production it's safer to exit with error
+      process.exit(1);
+    }
+  }
+
+  app.listen(PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Servidor backend rodando na porta ${PORT}`);
+    // eslint-disable-next-line no-console
+    console.log(`DATABASE_URL=${process.env.DATABASE_URL ? '[set]' : '[not set]'}`);
+  });
+};
+
+start();

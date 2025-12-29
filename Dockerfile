@@ -8,11 +8,11 @@ COPY backend/package.json backend/package-lock.json ./backend/
 # copy everything (source)
 COPY . .
 
+# install backend deps first (ensure backend build has its node_modules), generate prisma client and build backend
+RUN cd backend && NODE_ENV=development npm ci --silent && npx prisma generate --schema=./prisma/schema.prisma && npm run build
+
 # install root deps and build frontend
 RUN npm ci --silent && npm run build
-
-# install backend deps, generate prisma client and build backend
-RUN cd backend && npm ci --silent && npx prisma generate --schema=./prisma/schema.prisma && npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
