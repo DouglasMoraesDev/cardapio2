@@ -37,5 +37,5 @@ COPY healthcheck.js /healthcheck.js
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD node /healthcheck.js || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD node /healthcheck.js || exit 1
 ENTRYPOINT ["/entrypoint.sh"]
