@@ -1,0 +1,16 @@
+node_modules
+dist
+backend/node_modules
+frontend/node_modules
+*.log
+.env
+.env.*
+.DS_Store
+.git
+npm-debug.log
+pnpm-lock.yaml
+yarn.lock
+/.idea
+/.vscode
+coverage
+public/uploads

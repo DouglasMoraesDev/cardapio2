@@ -39,16 +39,22 @@ app.use('/api/avaliacoes', avaliacoesRouter);
 // Health check para plataformas de deploy
 app.get('/_health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
-// Servir frontend (build) em produção — assumir frontend/dist
-const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
-if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
+// Servir frontend (build) em produção. Procurar por build em duas localizações comuns:
+// 1) root/dist  (quando o frontend foi construído no root)
+// 2) ../frontend/dist (quando o frontend foi construído na pasta frontend)
+const possibleFrontends = [
+  path.join(__dirname, '..', '..', 'dist'),
+  path.join(__dirname, '..', '..', 'frontend', 'dist')
+];
+const existing = possibleFrontends.find(p => fs.existsSync(p));
+if (existing) {
+  app.use(express.static(existing));
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    res.sendFile(path.join(existing, 'index.html'));
   });
 } else {
   app.get('/', (_req, res) => {
-    res.send('Backend rodando. Frontend não encontrado (frontend/dist).');
+    res.send('Backend rodando. Frontend não encontrado (procurei em root/dist e frontend/dist).');
   });
 }
 
