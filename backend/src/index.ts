@@ -59,7 +59,7 @@ if (existing) {
   });
 }
 
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT) || 4000;
 const shouldRunMigrations = (process.env.PRISMA_MIGRATE_ON_STARTUP === 'true') || (process.env.NODE_ENV === 'production');
 
 const start = async () => {
@@ -87,9 +87,14 @@ const start = async () => {
     }
   }
 
-  app.listen(PORT, () => {
+  // bind explicitly to 0.0.0.0 so platform proxies can reach the server
+  app.listen(PORT, '0.0.0.0', () => {
     // eslint-disable-next-line no-console
     console.log(`Servidor backend rodando na porta ${PORT}`);
+    // eslint-disable-next-line no-console
+    console.log(`process.env.PORT=${process.env.PORT}`);
+    // eslint-disable-next-line no-console
+    console.log(`NODE_ENV=${process.env.NODE_ENV}`);
     // eslint-disable-next-line no-console
     console.log(`DATABASE_URL=${process.env.DATABASE_URL ? '[set]' : '[not set]'}`);
   });
