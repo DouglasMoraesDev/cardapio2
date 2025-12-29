@@ -18,6 +18,13 @@ FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# ensure OpenSSL is available for Prisma runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	openssl \
+	ca-certificates \
+	libssl-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
 # copy built backend, node_modules and frontend dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/node_modules ./backend/node_modules
