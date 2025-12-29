@@ -80,7 +80,7 @@ router.get('/me', verificarToken, async (req, res) => {
 router.put('/me', verificarToken, async (req, res) => {
   try {
     const estabelecimentoId = (req as any).estabelecimentoId;
-    const { taxa_servico, tema_fundo_geral, tema_fundo_cartoes, tema_cor_texto, tema_cor_primaria, tema_cor_destaque } = req.body;
+    const { taxa_servico, tema_fundo_geral, tema_fundo_cartoes, tema_cor_texto, tema_cor_primaria, tema_cor_destaque, texto_cardapio } = req.body;
     const data: any = {};
     if (taxa_servico !== undefined) data.taxa_servico = Number(taxa_servico);
     if (tema_fundo_geral !== undefined) data.tema_fundo_geral = tema_fundo_geral;
@@ -88,6 +88,7 @@ router.put('/me', verificarToken, async (req, res) => {
     if (tema_cor_texto !== undefined) data.tema_cor_texto = tema_cor_texto;
     if (tema_cor_primaria !== undefined) data.tema_cor_primaria = tema_cor_primaria;
     if (tema_cor_destaque !== undefined) data.tema_cor_destaque = tema_cor_destaque;
+    if (texto_cardapio !== undefined) data.texto_cardapio = texto_cardapio;
     // validações básicas
     if (!estabelecimentoId) return res.status(401).json({ error: 'Token inválido - estabelecimento ausente' });
     if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });

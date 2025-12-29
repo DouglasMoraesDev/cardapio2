@@ -21,6 +21,9 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   const [newProduct, setNewProduct] = useState<{ nome?: string; preco?: number; descricao?: string; categoriaId?: number | null; imagem_url?: string | null }>({ categoriaId: null });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [editProductData, setEditProductData] = useState<any>(null);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [isEditUploading, setIsEditUploading] = useState(false);
   const [waiters, setWaiters] = useState<Array<any>>([]);
   const [isLoadingWaiters, setIsLoadingWaiters] = useState(false);
   const [newWaiterName, setNewWaiterName] = useState('');
@@ -50,6 +53,12 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   const [pollInterval, setPollInterval] = useState<number>(() => { try { return Number(localStorage.getItem('gm_admin_poll_interval') || '8000'); } catch (e) { return 8000; } });
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState<any>(null);
+  const [startDate, setStartDate] = useState<string>(() => new Date().toISOString().slice(0,10));
+  const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().slice(0,10));
+  const [periodStats, setPeriodStats] = useState<any>(null);
+  const [closures, setClosures] = useState<Array<any>>([]);
+  const [selectedClosure, setSelectedClosure] = useState<any>(null);
+  const [isLoadingPeriod, setIsLoadingPeriod] = useState(false);
 
   const renderHome = () => (
     <>
@@ -249,6 +258,82 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
           ) : <p className="text-slate-400">Nenhuma venda hoje.</p>}
         </div>
       </div>
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-4">
+        <h3 className="text-lg font-bold mb-4">Fechamento Diário</h3>
+        <p className="text-sm text-slate-500 mb-4">Resumo das receitas do período atual. Fechar o dia grava a data de fechamento e todo relatório futuro será calculado a partir desse momento.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div>
+            <label className="text-xs text-slate-500">Data Início</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Data Fim</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded" />
+          </div>
+          <div className="flex items-end gap-2">
+            <button disabled={isLoadingPeriod} onClick={async () => {
+              try {
+                setIsLoadingPeriod(true);
+                const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                const startIso = new Date(startDate).toISOString();
+                const endIso = new Date(endDate).toISOString();
+                const statsPeriod = await api.getStatsPeriod(estabId, startIso, endIso);
+                setPeriodStats(statsPeriod);
+                // fetch closures and filter by range
+                const all = await api.getClosures();
+                const filtered = (all || []).filter((c:any) => {
+                  const t = new Date(c.criadoEm || c.criado_em || c.createdAt || c.created_at || c.data || c.timestamp).getTime();
+                  return t >= new Date(startIso).getTime() && t <= new Date(endIso).getTime();
+                });
+                setClosures(filtered || []);
+                setModalContent({ title: `Resumo ${startDate} → ${endDate}`, body: statsPeriod });
+                setModalOpen(true);
+              } catch (e) { console.error(e); alert('Erro ao buscar período'); }
+              finally { setIsLoadingPeriod(false); }
+            }} className="bg-slate-100 px-4 py-2 rounded">{isLoadingPeriod ? 'Buscando...' : 'Buscar Período'}</button>
+            <button onClick={async () => {
+              try {
+                const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                const stats = await api.getDailyStats(estabId);
+                setModalContent({ title: 'Resumo Diário', body: stats });
+                setModalOpen(true);
+              } catch (e) { console.error(e); alert('Erro ao buscar resumo'); }
+            }} className="bg-slate-100 px-4 py-2 rounded">Ver Resumo</button>
+            <button onClick={async () => {
+              if (!confirm('Confirma o fechamento do dia? Isso marcará o momento atual como último fechamento.')) return;
+              try {
+                // capture current closed tables to include in report
+                const closedTables = mesasFechadas || [];
+                const res = await api.closeDay(closedTables);
+                // clear local closed tables cache for the day
+                setMesasFechadas([]);
+                // show modal with fechamento and included mesas
+                setModalContent({ title: 'Dia Fechado', body: { fechamento: res.fechamento || res, mesas: closedTables } });
+                setModalOpen(true);
+              } catch (e) { console.error(e); alert('Erro ao fechar dia'); }
+            }} className="bg-emerald-600 text-white px-4 py-2 rounded">Fechar Dia</button>
+          </div>
+        </div>
+
+        {closures && closures.length > 0 && (
+          <div className="mt-4">
+            <h4 className="font-bold mb-2">Fechamentos encontrados</h4>
+            <ul className="space-y-2">
+              {closures.map((c:any) => (
+                <li key={c.id || c.criadoEm || c.criado_em} className="flex items-center justify-between border p-2 rounded">
+                  <div>
+                    <div className="font-bold">Fechamento #{c.id ?? ''}</div>
+                    <div className="text-sm text-slate-500">{new Date(c.criadoEm || c.criado_em || c.createdAt || c.created_at || c.data || c.timestamp).toLocaleString()}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setSelectedClosure(c); setModalContent({ title: `Fechamento ${c.id ?? ''}`, body: c }); setModalOpen(true); }} className="px-3 py-1 bg-slate-100 rounded">Ver</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -395,7 +480,19 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">Gestão de Menu</h2>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowNewProductForm(v => !v)} className="bg-orange-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all flex items-center gap-2">
+              <button onClick={async () => {
+                try {
+                  if (!categories || categories.length === 0) {
+                    const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                    const res = await api.getCategories(estabId);
+                    setCategories(res || []);
+                  }
+                  setShowNewProductForm(v => !v);
+                } catch (e) {
+                  console.error('Erro ao carregar categorias', e);
+                  setShowNewProductForm(v => !v);
+                }
+              }} className="bg-orange-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Novo Item
           </button>
@@ -464,14 +561,17 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                 <td className="px-6 py-4">{p.category || '-'}</td>
                 <td className="px-6 py-4">
                   <button onClick={async () => {
-                    const novoNome = prompt('Novo nome', p.name);
-                    if (!novoNome) return;
                     try {
-                      await api.updateProduct(p.id, { nome: novoNome });
-                      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-                      const res = await api.getProducts(estabId);
-                      setProducts(res || []);
-                    } catch (e) { console.error(e); alert('Erro ao atualizar'); }
+                      if (!categories || categories.length === 0) {
+                        const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                        const res = await api.getCategories(estabId);
+                        setCategories(res || []);
+                      }
+                    } catch (e) { console.error('Erro ao carregar categorias', e); }
+                    setEditProductData({ ...p });
+                    setEditImageFile(null);
+                    setModalContent({ type: 'edit-product', product: p });
+                    setModalOpen(true);
                   }} className="text-slate-400 hover:text-orange-600 transition-colors mr-4">Editar</button>
                   <button onClick={async () => {
                     if (!confirm('Excluir este produto?')) return;
@@ -731,23 +831,29 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
              <h1 className="text-3xl font-extrabold text-slate-900">
                {activeTab === 'home' ? 'Painel de Gestão' : modules.find(m => m.id === activeTab)?.name}
              </h1>
-             <div className="flex items-center gap-2 text-slate-500 font-medium mt-1">
-               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-               Sessão Administrativa •
+             <div className="flex items-center gap-3 mt-1">
+               <div className="flex items-center gap-2 text-slate-500 font-medium">
+                 <span className="w-2 h-2 rounded-full bg-blue-500" />
+                 Sessão Administrativa
+               </div>
+               <div className="flex items-center gap-2 text-sm text-slate-500">•</div>
+               <div className="flex items-center gap-3 text-sm text-slate-500">
+                 <label className="flex items-center gap-2">
+                   <input type="checkbox" checked={sseEnabled} onChange={(e) => { const v = e.target.checked; setSseEnabled(v); try { localStorage.setItem('gm_admin_sse_enabled', String(v)); } catch (err) {} }} />
+                   Usar SSE
+                 </label>
+                 <div className="flex items-center gap-2">
+                   <div>Polling (ms):</div>
+                   <input value={String(pollInterval)} onChange={(e) => { const v = Number(e.target.value || 0); setPollInterval(v); try { localStorage.setItem('gm_admin_poll_interval', String(v)); } catch (err) {} }} className="w-20 px-2 py-1 border rounded text-sm" />
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <span className={`w-3 h-3 rounded-full ${sseStatus === 'connected' ? 'bg-emerald-500' : sseStatus === 'connecting' ? 'bg-yellow-400' : sseStatus === 'error' ? 'bg-red-500' : 'bg-slate-300'}`} title={`SSE: ${sseStatus}`} />
+                   <div className="text-xs text-slate-400">{sseStatus === 'connected' ? 'SSE conectado' : sseStatus === 'connecting' ? 'SSE conectando' : sseStatus === 'error' ? 'SSE erro' : 'SSE off'}</div>
+                 </div>
+               </div>
              </div>
            </div>
-           <div className="ml-auto flex items-center gap-4">
-             <label className="text-sm text-slate-500 flex items-center gap-2">
-               <input type="checkbox" checked={sseEnabled} onChange={(e) => { const v = e.target.checked; setSseEnabled(v); try { localStorage.setItem('gm_admin_sse_enabled', String(v)); } catch (err) {} }} />
-               Usar SSE
-             </label>
-             <div className="text-sm text-slate-500">Polling (ms):</div>
-             <input value={String(pollInterval)} onChange={(e) => { const v = Number(e.target.value || 0); setPollInterval(v); try { localStorage.setItem('gm_admin_poll_interval', String(v)); } catch (err) {} }} className="w-20 px-2 py-1 border rounded text-sm" />
-             <div className="flex items-center gap-2">
-               <span className={`w-3 h-3 rounded-full ${sseStatus === 'connected' ? 'bg-emerald-500' : sseStatus === 'connecting' ? 'bg-yellow-400' : sseStatus === 'error' ? 'bg-red-500' : 'bg-slate-300'}`} title={`SSE: ${sseStatus}`} />
-               <div className="text-xs text-slate-400">{sseStatus === 'connected' ? 'SSE conectado' : sseStatus === 'connecting' ? 'SSE conectando' : sseStatus === 'error' ? 'SSE erro' : 'SSE off'}</div>
-             </div>
-           </div>
+           <div className="ml-auto" />
         </div>
       </div>
 
@@ -784,7 +890,10 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                         {(p.itens || []).map((it:any) => (
                           <div key={it.id} className="flex items-center justify-between">
                             <div>
-                              <div className="font-bold">{it.produtoId} (produto)</div>
+                              <div className="font-bold">{(() => {
+                                const prod = products.find((x:any) => Number(x.id) === Number(it.produtoId));
+                                return prod ? `${prod.name} • R$ ${Number(it.precoUnitario).toFixed(2)}` : (it.produto && (it.produto.nome || it.produto.name) ? `${it.produto.nome || it.produto.name} • R$ ${Number(it.precoUnitario).toFixed(2)}` : `${it.produtoId} (produto)`);
+                              })()}</div>
                               <div className="text-xs text-slate-400">R$ {Number(it.precoUnitario).toFixed(2)}</div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -807,8 +916,126 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                     </div>
                   ))}
                 </div>
-              ) : (
-                <pre className="whitespace-pre-wrap text-xs bg-slate-50 p-4 rounded">{JSON.stringify(modalContent.body, null, 2)}</pre>
+              ) : null}
+
+              {modalContent.type === 'edit-product' && modalContent.product && (
+                <div>
+                  <h4 className="font-bold mb-3">Editar Produto</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <input value={editProductData?.name || editProductData?.nome || ''} onChange={e => setEditProductData((s:any) => ({ ...s, name: e.target.value }))} placeholder="Nome" className="px-4 py-3 bg-slate-50 border rounded-xl" />
+                    <input type="number" value={editProductData?.price ?? editProductData?.preco ?? ''} onChange={e => setEditProductData((s:any) => ({ ...s, price: Number(e.target.value) }))} placeholder="Preço" className="px-4 py-3 bg-slate-50 border rounded-xl" />
+                    <select value={editProductData?.category || editProductData?.categoria || ''} onChange={e => setEditProductData((s:any) => ({ ...s, category: e.target.value }))} className="px-4 py-3 bg-slate-50 border rounded-xl">
+                      <option value=''>Sem categoria</option>
+                      {categories.map((c:any) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                    </select>
+                    <div />
+                  </div>
+                  <textarea value={editProductData?.description || editProductData?.descricao || ''} onChange={e => setEditProductData((s:any) => ({ ...s, description: e.target.value }))} placeholder="Descrição" className="w-full px-4 py-3 bg-slate-50 border rounded-xl mb-4" />
+                  <div className="flex gap-4 items-center mb-4">
+                    <input type="text" placeholder="URL da imagem (opcional)" value={editProductData?.imagem_url || editProductData?.imageUrl || ''} onChange={e => setEditProductData((s:any) => ({ ...s, imagem_url: e.target.value }))} className="flex-grow px-4 py-3 bg-slate-50 border rounded-xl" />
+                    <input type="file" onChange={e => setEditImageFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} className="px-3 py-2" />
+                  </div>
+                  <div className="flex gap-3">
+                    <button disabled={isEditUploading} onClick={async () => {
+                      try {
+                        setIsEditUploading(true);
+                        let imagem_url = editProductData?.imagem_url || editProductData?.imageUrl || null;
+                        if (editImageFile) {
+                          const up = await api.uploadProductImage(editImageFile);
+                          imagem_url = up.url;
+                        }
+                        const payload:any = { nome: editProductData.name || editProductData.nome, preco: Number(editProductData.price || editProductData.preco || 0), descricao: editProductData.description || editProductData.descricao, imagem_url: imagem_url || undefined };
+                        const cat = categories.find((c:any) => c.nome === (editProductData.category || editProductData.categoria));
+                        if (cat) payload.categoriaId = cat.id;
+                        await api.updateProduct(modalContent.product.id, payload);
+                        const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                        const res = await api.getProducts(estabId);
+                        setProducts(res || []);
+                        setModalOpen(false);
+                        setModalContent(null);
+                        setEditProductData(null);
+                        setEditImageFile(null);
+                      } catch (err) {
+                        console.error('Erro ao atualizar produto', err);
+                        alert('Erro ao atualizar produto');
+                      } finally { setIsEditUploading(false); }
+                    }} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">Salvar</button>
+                    <button onClick={() => { setModalOpen(false); setModalContent(null); setEditProductData(null); setEditImageFile(null); }} className="bg-slate-100 px-6 py-3 rounded-xl">Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {(modalContent.type !== 'mesa-details' && modalContent.type !== 'edit-product') && (
+                <> 
+                  {modalContent && modalContent.body && modalContent.body.totalRevenue !== undefined ? (
+                    <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div className="p-4 bg-slate-50 rounded">
+                          <div className="text-sm text-slate-500">Receita Total</div>
+                          <div className="text-2xl font-black text-slate-900">{Number(modalContent.body.totalRevenue || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded">
+                          <div className="text-sm text-slate-500">Taxa (estimada)</div>
+                          <div className="text-2xl font-black text-slate-900">{Number(modalContent.body.totalService || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded">
+                          <div className="text-sm text-slate-500">Pedidos</div>
+                          <div className="text-2xl font-black">{modalContent.body.ordersCount || 0}</div>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded">
+                          <div className="text-sm text-slate-500">Avaliações</div>
+                          <div className="text-2xl font-black">{modalContent.body.avaliacoesCount || 0}</div>
+                        </div>
+                      </div>
+
+                      <div className="mb-4">
+                        <div className="text-sm text-slate-500">Janela de Dados</div>
+                        <div className="text-sm text-slate-700">
+                          {(() => {
+                            try {
+                              const s = modalContent.body.janela?.start ? new Date(modalContent.body.janela.start).toLocaleString() : '';
+                              const e = modalContent.body.janela?.end ? new Date(modalContent.body.janela.end).toLocaleString() : '';
+                              return s && e ? `${s} — ${e}` : (s || e || 'Período não especificado');
+                            } catch (err) { return 'Período não especificado'; }
+                          })()}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="font-bold mb-2">Categorias mais vendidas</h4>
+                          <div className="bg-white p-3 rounded overflow-auto max-h-48">
+                            {Array.isArray(modalContent.body.categoriesMostSold) && modalContent.body.categoriesMostSold.length > 0 ? (
+                              <ol className="list-decimal pl-5 text-sm">
+                                {modalContent.body.categoriesMostSold.map((c:any, idx:number) => (
+                                  <li key={idx} className="mb-1 flex justify-between"><span>{c.categoria}</span><span className="font-black">{c.quantidade}</span></li>
+                                ))}
+                              </ol>
+                            ) : <div className="text-sm text-slate-400">Nenhuma categoria</div>}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="font-bold mb-2">Produtos mais vendidos</h4>
+                          <div className="bg-white p-3 rounded overflow-auto max-h-48">
+                            {Array.isArray(modalContent.body.productsMostSold) && modalContent.body.productsMostSold.length > 0 ? (
+                              <table className="w-full text-sm">
+                                <thead className="text-xs text-slate-500 text-left"><tr><th>Produto</th><th className="text-right">Qtd</th><th className="text-right">Preço</th></tr></thead>
+                                <tbody>
+                                  {modalContent.body.productsMostSold.map((p:any) => (
+                                    <tr key={p.id} className="border-t"><td>{p.nome}</td><td className="text-right font-black">{p.quantidade}</td><td className="text-right">{Number(p.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : <div className="text-sm text-slate-400">Nenhum produto</div>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-xs bg-slate-50 p-4 rounded">{JSON.stringify(modalContent.body, null, 2)}</pre>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -825,6 +1052,7 @@ const AjustesForm: React.FC = () => {
   const [corTexto, setCorTexto] = useState('#fefce8');
   const [corPrimaria, setCorPrimaria] = useState('#d18a59');
   const [corDestaque, setCorDestaque] = useState('#c17a49');
+  const [textoCardapio, setTextoCardapio] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -838,6 +1066,7 @@ const AjustesForm: React.FC = () => {
         setCorTexto(est.tema_cor_texto ?? '#fefce8');
         setCorPrimaria(est.tema_cor_primaria ?? '#d18a59');
         setCorDestaque(est.tema_cor_destaque ?? '#c17a49');
+        setTextoCardapio(est.texto_cardapio ?? '');
       }
     } catch (e) {
       console.error('Erro ao carregar ajustes', e);
@@ -849,7 +1078,7 @@ const AjustesForm: React.FC = () => {
   const save = async () => {
     try {
       setLoading(true);
-      await api.updateEstablishment({ taxa_servico: taxa, tema_fundo_geral: fundoGeral, tema_fundo_cartoes: fundoCartoes, tema_cor_texto: corTexto, tema_cor_primaria: corPrimaria, tema_cor_destaque: corDestaque });
+      await api.updateEstablishment({ taxa_servico: taxa, tema_fundo_geral: fundoGeral, tema_fundo_cartoes: fundoCartoes, tema_cor_texto: corTexto, tema_cor_primaria: corPrimaria, tema_cor_destaque: corDestaque, texto_cardapio: textoCardapio });
       alert('Ajustes salvos');
     } catch (e) {
       console.error('Erro ao salvar ajustes', e);
@@ -906,6 +1135,10 @@ const AjustesForm: React.FC = () => {
                 <input value={corDestaque} onChange={e => setCorDestaque(e.target.value)} className="text-xs font-mono text-slate-400 px-2 py-1 border rounded" />
                 <div className="w-8 h-8 rounded-lg border border-slate-200 shadow-sm" style={{ backgroundColor: corDestaque }} />
               </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Texto do Cardápio</label>
+              <textarea value={textoCardapio} onChange={e => setTextoCardapio(e.target.value)} placeholder="Texto que aparece no cardápio público" className="w-full px-4 py-3 bg-slate-50 border rounded-xl" rows={4} />
             </div>
           </div>
         </div>

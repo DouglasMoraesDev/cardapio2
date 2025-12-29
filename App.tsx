@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
-import { RegistrationForm } from './components/RegistrationForm';
-import { SuccessScreen } from './components/SuccessScreen';
-import { Header } from './components/Header';
-import { WaiterLogin } from './components/WaiterLogin';
-import { AdminLogin } from './components/AdminLogin';
-import { TableManagement } from './components/TableManagement';
-import { AdminDashboard } from './components/AdminDashboard';
-import { MenuView } from './components/MenuView';
+import { RegistrationForm } from './frontend/components/RegistrationForm';
+import { SuccessScreen } from './frontend/components/SuccessScreen';
+import { Header } from './frontend/components/Header';
+import { WaiterLogin } from './frontend/components/WaiterLogin';
+import { AdminLogin } from './frontend/components/AdminLogin';
+import { TableManagement } from './frontend/components/TableManagement';
+import { AdminDashboard } from './frontend/components/AdminDashboard';
+import { MenuView } from './frontend/components/MenuView';
 import { RegistrationState } from './types';
 
 type View = 'register' | 'waiter-login' | 'admin-login' | 'success' | 'tables' | 'admin-dashboard' | 'menu';

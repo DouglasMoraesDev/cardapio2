@@ -186,6 +186,20 @@ export const api = {
     const url = `${API_BASE}/api/stats/daily?estabelecimentoId=${estabelecimentoId}`;
     return fetchJson(url);
   },
+  async getStatsPeriod(estabelecimentoId: number, startIso: string, endIso: string) {
+    const qs = new URLSearchParams({ estabelecimentoId: String(estabelecimentoId), start: startIso, end: endIso });
+    const url = `${API_BASE}/api/stats/period?${qs.toString()}`;
+    return fetchJson(url);
+  },
+  async getClosures() {
+    const url = `${API_BASE}/api/stats/closures`;
+    return fetchJson(url);
+  },
+  async closeDay(mesas?: any[]) {
+    const url = `${API_BASE}/api/stats/close`;
+    const body = mesas ? { mesas } : undefined;
+    return fetchJson(url, { method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  },
   async getEstablishment() {
     const url = `${API_BASE}/api/estabelecimentos/me`;
     return fetchJson(url);

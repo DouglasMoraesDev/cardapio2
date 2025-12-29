@@ -20,6 +20,8 @@ model Estabelecimento {
   tema_cor_texto String? @db.VarChar(20)
   tema_cor_primaria String? @db.VarChar(20)
   tema_cor_destaque String? @db.VarChar(20)
+  texto_cardapio    String? @db.Text
+  ultimo_fechamento DateTime?
   criadoEm      DateTime  @default(now())
   atualizadoEm  DateTime  @updatedAt
 
@@ -29,6 +31,7 @@ model Estabelecimento {
   produtos       Produto[]
   pedidos        Pedido[] @relation("EstabPedidos")
   mesas          Mesa[]
+  fechamentos     Fechamento[]
 }
 
 model UsuarioAdmin {
@@ -133,6 +136,14 @@ model ItemPedido {
   produtoId Int
   quantidade Int
   precoUnitario Float
+}
+
+model Fechamento {
+  id               Int    @id @default(autoincrement())
+  estabelecimento  Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+  estabelecimentoId Int
+  fechadoEm        DateTime @default(now())
+  mesas            Json?
 }
 
 enum PedidoStatus {
