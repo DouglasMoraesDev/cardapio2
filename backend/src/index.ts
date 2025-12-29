@@ -65,11 +65,24 @@ const shouldRunMigrations = (process.env.PRISMA_MIGRATE_ON_STARTUP === 'true') |
 const start = async () => {
   if (shouldRunMigrations) {
     try {
-      console.log('PRISMA: running `prisma migrate deploy` before starting server');
-      execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+      console.log('PRISMA: ensuring Prisma client and applying migrations from backend/prisma...');
+      const prismaBin = path.resolve(__dirname, '..', 'node_modules', '.bin', 'prisma');
+      const schemaPath = path.resolve(__dirname, '..', 'prisma', 'schema.prisma');
+
+      const exists = fs.existsSync(prismaBin);
+      if (exists) {
+        console.log('PRISMA: Using prisma from', prismaBin);
+        // generate client first
+        execSync(`${prismaBin} generate --schema=${schemaPath}`, { stdio: 'inherit' });
+        // then run migrations
+        execSync(`${prismaBin} migrate deploy --schema=${schemaPath}`, { stdio: 'inherit' });
+      } else {
+        console.log('PRISMA: prisma binary not found in backend/node_modules, falling back to npx with explicit --schema');
+        execSync(`npx prisma generate --schema=${schemaPath}`, { stdio: 'inherit' });
+        execSync(`npx prisma migrate deploy --schema=${schemaPath}`, { stdio: 'inherit' });
+      }
     } catch (err) {
       console.error('PRISMA: migrate deploy failed', err);
-      // If migrations fail in production it's safer to exit with error
       process.exit(1);
     }
   }
