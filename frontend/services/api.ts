@@ -3,7 +3,15 @@ import { RegistrationState } from '../types';
 
 // Prefer Vite env `VITE_API_URL`; when not set and running in browser, use same origin (production)
 const viteUrl = (import.meta as any).VITE_API_URL;
-const defaultBase = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'http://localhost:4000';
+// When developing on localhost prefer backend dev URL (http://localhost:4000). In production use same origin.
+let defaultBase = 'http://localhost:4000';
+if (typeof window !== 'undefined' && window.location) {
+  const hostname = window.location.hostname;
+  const origin = window.location.origin;
+  if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    defaultBase = origin;
+  }
+}
 export const API_BASE = (viteUrl || defaultBase).replace(/\/$/, '');
 
 const TOKEN_KEY = 'gm_token';
