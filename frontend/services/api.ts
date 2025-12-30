@@ -4,7 +4,7 @@ import { RegistrationState } from '../types';
 // Prefer Vite env `VITE_API_URL`; when not set and running in browser, use same origin (production)
 const viteUrl = (import.meta as any).VITE_API_URL;
 const defaultBase = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'http://localhost:4000';
-const API_BASE = (viteUrl || defaultBase).replace(/\/$/, '');
+export const API_BASE = (viteUrl || defaultBase).replace(/\/$/, '');
 
 const TOKEN_KEY = 'gm_token';
 const ESTAB_KEY = 'gm_estabelecimentoId';

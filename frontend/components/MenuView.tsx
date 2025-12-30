@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { api, Product } from '../services/api';
+import { api, Product, API_BASE } from '../services/api';
 
 interface CartItem extends Product {
   quantity: number;
@@ -221,8 +221,7 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
     loadEstab();
     try {
       const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-      const base = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-      es = new EventSource(`${base}/api/notifications/stream?estabelecimentoId=${estabId}`);
+      es = new EventSource(`${API_BASE}/api/notifications/stream?estabelecimentoId=${estabId}`);
       es.addEventListener('estabelecimento_updated', (ev: any) => {
         try {
           const payload = JSON.parse(ev.data);

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 import { useCallback } from 'react';
 
 interface Props {
@@ -128,8 +128,7 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
     if (eventSourceRef.current) return;
     setSseStatus('connecting');
     const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-    const base = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-    const url = `${base}/api/notifications/stream?estabelecimentoId=${estabId}`;
+    const url = `${API_BASE}/api/notifications/stream?estabelecimentoId=${estabId}`;
     try {
       const es = new EventSource(url);
       es.addEventListener('pedido_created', () => {

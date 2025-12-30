@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 
 interface Props {
   waiterName: string;
@@ -156,8 +156,7 @@ export const TableManagement: React.FC<Props> = ({ waiterName, onLogout, onOpenT
       }
     }
     const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-    const base = (((import.meta as any).VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-    const url = `${base}/api/notifications/stream?estabelecimentoId=${estabId}`;
+    const url = `${API_BASE}/api/notifications/stream?estabelecimentoId=${estabId}`;
     const es = new EventSource(url);
     es.addEventListener('pedido_created', (e: MessageEvent) => eventSourceHandler(e, 'pedido_created'));
     es.addEventListener('pedido_updated', (e: MessageEvent) => eventSourceHandler(e, 'pedido_updated'));
