@@ -14,10 +14,24 @@ import { RegistrationState } from './types';
 type View = 'register' | 'waiter-login' | 'admin-login' | 'success' | 'tables' | 'admin-dashboard' | 'menu';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<View>('register');
+  const [view, setView] = useState<View>(() => {
+    try {
+      const qp = new URLSearchParams(window.location.search);
+      const mesa = qp.get('mesa');
+      if (mesa) return 'menu';
+      const path = window.location.pathname || '';
+      if (path === '/dev' || path === '/dev/login') return 'register';
+    } catch (e) { /* ignore */ }
+    return 'register';
+  });
   const [formData, setFormData] = useState<RegistrationState | null>(null);
   const [waiterName, setWaiterName] = useState('Douglas');
-  const [activeTable, setActiveTable] = useState<string | null>(null);
+  const [activeTable, setActiveTable] = useState<string | null>(() => {
+    try {
+      const qp = new URLSearchParams(window.location.search);
+      return qp.get('mesa');
+    } catch (e) { return null; }
+  });
   const [devView, setDevView] = useState<'dev-register'|'dev-login'|'dev-dashboard' | null>(null);
 
   const handleSubmitRegistration = (data: RegistrationState) => {
@@ -45,17 +59,8 @@ const App: React.FC = () => {
     setView('menu');
   };
 
-  // If opened with ?mesa= in URL, auto-open menu for that mesa
+  // open dev portal when path is /dev or /dev/login or /dev/register
   useEffect(() => {
-    try {
-      const qp = new URLSearchParams(window.location.search);
-      const mesa = qp.get('mesa');
-      if (mesa) {
-        setActiveTable(mesa);
-        setView('menu');
-      }
-    } catch (e) { /* ignore */ }
-    // open dev portal when path is /dev or /dev/login or /dev/register
     try {
       const path = window.location.pathname || '';
       if (path === '/dev' || path === '/dev/login') {

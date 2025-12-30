@@ -403,7 +403,7 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
         </div>
       </div>
 
-      <div className="p-6 flex-grow pb-40">
+      <div className="p-6 flex-grow pb-72">
         <h2 className="text-2xl font-bold mb-4">Qual será a pedida de hoje?</h2>
 
         {/* Search */}
