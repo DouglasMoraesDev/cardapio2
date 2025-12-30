@@ -86,6 +86,27 @@ router.post('/close', verificarToken, async (req, res) => {
     const fechamento = await prisma.fechamento.create({ data: { estabelecimentoId, fechadoEm: now, mesas: mesasBody } });
     // também atualizar ultimo_fechamento para compatibilidade
     await prisma.estabelecimento.update({ where: { id: estabelecimentoId }, data: { ultimo_fechamento: now } });
+    // Garantir que as mesas enviadas no fechamento fiquem marcadas como fechadas (aberta=false)
+    try {
+      if (mesasBody && Array.isArray(mesasBody) && mesasBody.length > 0) {
+        const ids = mesasBody.map((m:any) => (typeof m === 'number' ? m : (m.id ?? null))).filter((x:any) => x);
+        if (ids.length > 0) {
+          // Buscar os registros atuais e atualizar apenas quando necessário, preservando fechadaEm quando já existir
+          const atuais = await prisma.mesa.findMany({ where: { id: { in: ids } } });
+          for (const m of atuais) {
+            try {
+              const data: any = { aberta: false };
+              if (!m.fechadaEm) data.fechadaEm = now;
+              await prisma.mesa.update({ where: { id: m.id }, data });
+            } catch (e) {
+              console.warn('Erro ao atualizar mesa durante fechamento:', m.id, e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Falha ao garantir estado das mesas após fechamento', e);
+    }
     return res.json({ sucesso: true, fechamento });
   } catch (e) {
     console.error('Erro ao fechar dia', e);

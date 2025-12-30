@@ -12,10 +12,11 @@ router.post('/', async (req, res) => {
     const estabelecimentoId = estabelecimentoIdBody || (req as any).estabelecimentoId;
     if (!estabelecimentoId || !mesaNumero || !Array.isArray(itens) || itens.length === 0) return res.status(400).json({ error: 'Dados incompletos' });
 
-    // buscar ou criar mesa
-    let mesa = await prisma.mesa.findFirst({ where: { numero: String(mesaNumero), estabelecimentoId } });
+    // buscar ou criar mesa — preferir mesa ABERTA se existir; caso contrário criar nova
+    let mesa = await prisma.mesa.findFirst({ where: { numero: String(mesaNumero), estabelecimentoId, aberta: true } });
     if (!mesa) {
-      mesa = await prisma.mesa.create({ data: { numero: String(mesaNumero), estabelecimentoId } });
+      // criar nova mesa para evitar reusar dados de clientes anteriores
+      mesa = await prisma.mesa.create({ data: { numero: String(mesaNumero), estabelecimentoId, aberta: true } });
     }
 
     // garantir que cada item tem produtoId e quantidade

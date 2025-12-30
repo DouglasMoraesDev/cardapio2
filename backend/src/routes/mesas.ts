@@ -13,6 +13,21 @@ router.get('/', async (req, res) => {
     if (typeof estabelecimentoId === 'number' && !Number.isNaN(estabelecimentoId)) where.estabelecimentoId = estabelecimentoId;
     if (abertaQ === 'true') where.aberta = true;
     if (abertaQ === 'false') where.aberta = false;
+    // If requesting closed mesas and we have an estabelecimentoId, filter by mesas closed after ultimo_fechamento
+    if (abertaQ === 'false' && where.estabelecimentoId) {
+      try {
+        const estab = await prisma.estabelecimento.findUnique({ where: { id: where.estabelecimentoId } });
+        if (estab && estab.ultimo_fechamento) {
+          // only return mesas closed after the last fechamento
+          where.fechadaEm = { gt: estab.ultimo_fechamento };
+          // also require that the mesa has at least one pedido created after ultimo_fechamento
+          // this prevents showing old mesas that were closed but have no pedidos in the current period
+          where.pedidos = { some: { criadoEm: { gt: estab.ultimo_fechamento } } };
+        }
+      } catch (e) {
+        // ignore and proceed without extra filter
+      }
+    }
     const mesas = await prisma.mesa.findMany({ where, include: { pedidos: { include: { itens: true } } } });
     return res.json(mesas);
   } catch (e) {
@@ -28,9 +43,12 @@ router.post('/', async (req, res) => {
     const { numero, estabelecimentoId: estabelecimentoIdBody } = req.body;
     const estabelecimentoId = estabelecimentoIdBody || (req as any).estabelecimentoId;
     if (!numero || !estabelecimentoId) return res.status(400).json({ error: 'Parâmetros inválidos' });
-    let mesa = await prisma.mesa.findFirst({ where: { numero: String(numero), estabelecimentoId } });
+    // Prefer returning an existing OPEN table with the same number. If the last table with that number
+    // is closed, create a new Mesa record so the establishment can reuse table numbers without
+    // inheriting previous customer's data.
+    let mesa = await prisma.mesa.findFirst({ where: { numero: String(numero), estabelecimentoId, aberta: true } });
     if (!mesa) {
-      mesa = await prisma.mesa.create({ data: { numero: String(numero), estabelecimentoId } });
+      mesa = await prisma.mesa.create({ data: { numero: String(numero), estabelecimentoId, aberta: true } });
     }
     return res.json({ sucesso: true, mesa });
   } catch (e) {

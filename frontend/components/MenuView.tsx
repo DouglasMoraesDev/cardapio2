@@ -42,25 +42,29 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
           const cm = localStorage.getItem('gm_current_mesa');
           let mesaObj: any = null;
           if (cm) {
-            mesaObj = JSON.parse(cm);
-          } else {
+            try { mesaObj = JSON.parse(cm); } catch (e) { mesaObj = null; }
+            // se a mesa armazenada estiver fechada, ignorar e procurar/abrir uma nova
+            if (mesaObj && mesaObj.aberta === false) mesaObj = null;
+          }
+          if (!mesaObj) {
             // tentar buscar mesa pelo query param `mesa` (caso a guia tenha sido aberta com ?mesa=)
             try {
               const qp = new URLSearchParams(window.location.search);
               const mesaParam = qp.get('mesa');
               if (mesaParam) {
                     const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-                    let mesas = [] as any[];
                     if (estabId) {
-                      try { mesas = await api.getMesas(estabId); } catch (e) { mesas = []; }
-                    }
-                    mesaObj = (mesas || []).find((m:any) => String(m.numero) === String(mesaParam) || String(m.id) === String(mesaParam));
-                    if (!mesaObj && estabId) {
-                      // ensure mesa exists on backend (create if necessary)
-                      try {
-                        const resp: any = await api.createMesa(estabId, String(mesaParam));
-                        if (resp && resp.sucesso && resp.mesa) mesaObj = resp.mesa;
-                      } catch (e) { /* ignore */ }
+                      // preferir mesas abertas
+                      let mesasOpen = [] as any[];
+                      try { mesasOpen = await api.getMesas(estabId, true); } catch (e) { mesasOpen = []; }
+                      mesaObj = (mesasOpen || []).find((m:any) => String(m.numero) === String(mesaParam) || String(m.id) === String(mesaParam));
+                      if (!mesaObj) {
+                        // nenhuma mesa aberta — criar nova para evitar herdar pedidos antigos
+                        try {
+                          const resp: any = await api.createMesa(estabId, String(mesaParam));
+                          if (resp && resp.sucesso && resp.mesa) mesaObj = resp.mesa;
+                        } catch (e) { /* ignore */ }
+                      }
                     }
                     if (mesaObj) {
                       try { localStorage.setItem('gm_current_mesa', JSON.stringify(mesaObj)); } catch (e) {}

@@ -79,31 +79,30 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
 
       {/* Resumo financeiro removido da tela inicial. Dados serão carregados somente ao abrir a aba "Financeiro". */}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl shadow-slate-200 overflow-hidden relative">
-          <h5 className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-6">Mais Vendidos</h5>
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-3xl font-black">1</div>
-            <div>
-              <p className="text-2xl font-black tracking-tight mb-1">dark</p>
-              <div className="inline-flex items-center px-3 py-1 rounded-full bg-orange-500 text-[10px] font-bold uppercase">
-                38 vds
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
-          <div>
-            <h5 className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-6">Mix de Categorias</h5>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-2xl">🍺</div>
-              <span className="text-2xl font-black text-slate-800 italic">Cerveja</span>
-            </div>
-          </div>
-          <div className="mt-6 w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 w-[70%] rounded-full"></div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <button onClick={() => openPreview('revenue')} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-left hover:shadow-md">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Receita (Hoje)</p>
+          <h4 className="text-2xl font-black text-slate-900">{stats ? Number(stats.totalRevenue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</h4>
+          <p className="text-sm text-slate-500 mt-2">Valor gerado hoje (após último fechamento)</p>
+        </button>
+
+        <button onClick={() => openPreview('service')} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-left hover:shadow-md">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Taxa de Serviço (Hoje)</p>
+          <h4 className="text-2xl font-black text-orange-600">{stats ? Number(stats.totalService).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</h4>
+          <p className="text-sm text-slate-500 mt-2">Estimativa da taxa aplicada hoje</p>
+        </button>
+
+        <button onClick={() => openPreview('orders')} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-left hover:shadow-md">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pedidos (Hoje)</p>
+          <h4 className="text-2xl font-black text-slate-900">{stats ? stats.ordersCount : 0}</h4>
+          <p className="text-sm text-slate-500 mt-2">Total de pedidos no período</p>
+        </button>
+
+        <button onClick={() => openPreview('reviews')} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-left hover:shadow-md">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Avaliações (Hoje)</p>
+          <h4 className="text-2xl font-black text-slate-900">{stats ? stats.avaliacoesCount : 0}</h4>
+          <p className="text-sm text-slate-500 mt-2">Avaliações recebidas no período</p>
+        </button>
       </div>
     </>
   );
@@ -274,18 +273,24 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               try {
                 setIsLoadingPeriod(true);
                 const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-                const startIso = new Date(startDate).toISOString();
-                const endIso = new Date(endDate).toISOString();
+                // Use start at 00:00:00 and end as next-day 00:00:00 so backend (gte start, lt end) includes full end day
+                const s = new Date(startDate);
+                s.setHours(0,0,0,0);
+                const e = new Date(endDate);
+                e.setHours(0,0,0,0);
+                e.setDate(e.getDate() + 1);
+                const startIso = s.toISOString();
+                const endIso = e.toISOString();
                 const statsPeriod = await api.getStatsPeriod(estabId, startIso, endIso);
                 setPeriodStats(statsPeriod);
-                // fetch closures and filter by range
+                // fetch closures and filter by range (using fechadoEm)
                 const all = await api.getClosures();
                 const filtered = (all || []).filter((c:any) => {
-                  const t = new Date(c.criadoEm || c.criado_em || c.createdAt || c.created_at || c.data || c.timestamp).getTime();
-                  return t >= new Date(startIso).getTime() && t <= new Date(endIso).getTime();
+                  const t = new Date(c.fechadoEm || c.criadoEm || c.criado_em || c.createdAt || c.created_at || c.data || c.timestamp).getTime();
+                  return t >= s.getTime() && t < e.getTime();
                 });
                 setClosures(filtered || []);
-                setModalContent({ title: `Resumo ${startDate} → ${endDate}`, body: statsPeriod });
+                setModalContent({ title: `Resumo ${startDate} → ${endDate}`, body: { ...statsPeriod, closures: filtered } });
                 setModalOpen(true);
               } catch (e) { console.error(e); alert('Erro ao buscar período'); }
               finally { setIsLoadingPeriod(false); }
@@ -301,13 +306,16 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
             <button onClick={async () => {
               if (!confirm('Confirma o fechamento do dia? Isso marcará o momento atual como último fechamento.')) return;
               try {
-                // capture current closed tables to include in report
-                const closedTables = mesasFechadas || [];
+                const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                // fetch closed mesas right now to include accurate data in the fechamento
+                const closedTables = await api.getMesas(estabId, false) || [];
                 const res = await api.closeDay(closedTables);
-                // clear local closed tables cache for the day
-                setMesasFechadas([]);
-                // show modal with fechamento and included mesas
-                setModalContent({ title: 'Dia Fechado', body: { fechamento: res.fechamento || res, mesas: closedTables } });
+                // refresh local closed mesas cache
+                const refreshedClosed = await api.getMesas(estabId, false) || [];
+                setMesasFechadas(refreshedClosed);
+                // show modal with fechamento and included mesas (prefer server retorno)
+                const fechamento = res?.fechamento || res;
+                setModalContent({ title: 'Dia Fechado', body: { fechamento, mesas: fechamento?.mesas?.length ? fechamento.mesas : refreshedClosed } });
                 setModalOpen(true);
               } catch (e) { console.error(e); alert('Erro ao fechar dia'); }
             }} className="bg-emerald-600 text-white px-4 py-2 rounded">Fechar Dia</button>
@@ -360,7 +368,19 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Subtotal</p>
                 <h4 className="text-2xl font-black text-slate-900">R$ {Number(subtotal).toFixed(2)}</h4>
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => { setModalContent({ type: 'mesa-details', mesa }); setModalOpen(true); }} className="flex-1 bg-white border border-slate-200 py-3 rounded-xl">Detalhes</button>
+                  <button onClick={async () => {
+                    try {
+                      if (!products || products.length === 0) {
+                        setIsLoadingProducts(true);
+                        const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+                        const res = await api.getProducts(estabId);
+                        setProducts(res || []);
+                      }
+                    } catch (e) { console.error('Erro ao carregar produtos para modal de mesa', e); }
+                    finally { setIsLoadingProducts(false); }
+                    setModalContent({ type: 'mesa-details', mesa });
+                    setModalOpen(true);
+                  }} className="flex-1 bg-white border border-slate-200 py-3 rounded-xl">Detalhes</button>
                   <button onClick={async () => {
                     try {
                       const taxaPaga = confirm('Taxa de serviço foi paga? OK = Sim');
@@ -436,7 +456,7 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
         } catch (e) { console.error('Erro ao carregar mesas fechadas', e); }
         finally { setIsLoadingMesas(false); }
       }
-      if (activeTab === 'financeiro') {
+      if (activeTab === 'financeiro' || activeTab === 'home') {
         try {
           const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
           const s = await api.getDailyStats(estabId);
@@ -473,6 +493,40 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
     }
     return () => { if (pollId) clearInterval(pollId); if (sseEnabled) stopSSE(); };
   }, [activeTab]);
+
+  const openPreview = async (type: 'revenue' | 'service' | 'orders' | 'reviews' | 'categories' | 'products') => {
+    try {
+      const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
+      if (type === 'reviews') {
+        const all = await api.getAvaliacoes(estabId);
+        const five = (all || []).filter((a:any) => Number(a.estrelas) === 5).slice(0,5);
+        setModalContent({ type: 'preview', previewType: 'reviews', body: { reviews: five } });
+        setModalOpen(true);
+        return;
+      }
+      // categories / products data come from stats
+      if (!stats) {
+        const s = await api.getDailyStats(estabId);
+        setStats(s);
+      }
+      if (type === 'categories') {
+        setModalContent({ type: 'preview', previewType: 'categories', body: { categories: (stats && stats.categoriesMostSold) || [] } });
+        setModalOpen(true);
+        return;
+      }
+      if (type === 'products') {
+        setModalContent({ type: 'preview', previewType: 'products', body: { products: (stats && stats.productsMostSold) || [] } });
+        setModalOpen(true);
+        return;
+      }
+      // simple show stats for revenue/service/orders
+      setModalContent({ title: type === 'revenue' ? 'Receita (Hoje)' : type === 'service' ? 'Taxa de Serviço (Hoje)' : 'Pedidos (Hoje)', body: stats });
+      setModalOpen(true);
+    } catch (e) {
+      console.error('Erro ao abrir preview', e);
+      alert('Erro ao abrir pré-visualização');
+    }
+  };
 
   const renderCardapio = () => (
     <div className="space-y-6">
@@ -965,8 +1019,119 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               )}
 
               {(modalContent.type !== 'mesa-details' && modalContent.type !== 'edit-product') && (
-                <> 
-                  {modalContent && modalContent.body && modalContent.body.totalRevenue !== undefined ? (
+                <>
+                  {modalContent.type === 'preview' && modalContent.previewType === 'reviews' ? (
+                    <div>
+                      <h4 className="font-bold mb-2">Avaliações 5★ recentes</h4>
+                      <div className="space-y-3">
+                        {Array.isArray(modalContent.body.reviews) && modalContent.body.reviews.length > 0 ? (
+                          modalContent.body.reviews.map((r:any) => (
+                            <div key={r.id || r.criadoEm} className="p-3 border rounded">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="font-bold">Mesa {r.mesaId ?? '—'}</div>
+                                <div className="text-xs text-slate-400">{new Date(r.criadoEm).toLocaleString()}</div>
+                              </div>
+                              <div className="text-sm text-slate-700">{'★'.repeat(Math.max(0, Math.min(5, r.estrelas || 0)))} — {r.comentario || ''}</div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-slate-400">Nenhuma avaliação 5★ disponível.</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : modalContent.type === 'preview' && modalContent.previewType === 'categories' ? (
+                    <div>
+                      <h4 className="font-bold mb-3">Categorias mais vendidas</h4>
+                      {Array.isArray(modalContent.body.categories) && modalContent.body.categories.length > 0 ? (
+                        <div className="space-y-2">
+                          {modalContent.body.categories.map((c:any, idx:number) => (
+                            <div key={idx} className="flex items-center gap-3">
+                              <div className="flex-1 text-sm">{c.categoria}</div>
+                              <div className="w-40">
+                                <div className="h-3 bg-slate-100 rounded overflow-hidden">
+                                  <div style={{ width: `${Math.min(100, (c.quantidade / (modalContent.body.categories[0].quantidade || 1)) * 100)}%` }} className="h-full bg-blue-500 rounded"></div>
+                                </div>
+                              </div>
+                              <div className="w-12 text-right font-black">{c.quantidade}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div className="text-sm text-slate-400">Nenhuma categoria</div>}
+                    </div>
+                  ) : modalContent.type === 'preview' && modalContent.previewType === 'products' ? (
+                    <div>
+                      <h4 className="font-bold mb-3">Produtos mais vendidos</h4>
+                      {Array.isArray(modalContent.body.products) && modalContent.body.products.length > 0 ? (
+                        <ol className="list-decimal pl-5 text-sm">
+                          {modalContent.body.products.map((p:any) => (
+                            <li key={p.id} className="flex items-center justify-between py-1">
+                              <div>{p.nome}</div>
+                              <div className="font-black">{p.quantidade}</div>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : <div className="text-sm text-slate-400">Nenhum produto</div>}
+                    </div>
+                  ) : 
+                  modalContent && modalContent.body && (modalContent.body.fechamento || Array.isArray(modalContent.body.mesas)) ? (
+                    <div>
+                      <div className="mb-4">
+                        <div className="text-sm text-slate-500">Fechamento registrado em</div>
+                        <div className="text-sm text-slate-700 font-bold">{modalContent.body.fechamento && modalContent.body.fechamento.fechadoEm ? new Date(modalContent.body.fechamento.fechadoEm).toLocaleString() : (modalContent.body.fechamento && modalContent.body.fechamento.criadoEm ? new Date(modalContent.body.fechamento.criadoEm).toLocaleString() : '—')}</div>
+                      </div>
+                      <div className="mb-4">
+                        <h4 className="font-bold mb-2">Mesas incluídas no fechamento</h4>
+                        <div className="bg-white p-3 rounded overflow-auto max-h-60">
+                          {Array.isArray(modalContent.body.mesas) && modalContent.body.mesas.length > 0 ? (
+                            <div className="space-y-3">
+                              {modalContent.body.mesas.map((mesa:any) => {
+                                const pedidosCount = mesa.pedidos?.length || 0;
+                                const total = (mesa.pedidos || []).reduce((acc:any, p:any) => acc + (p.total || 0), 0);
+                                return (
+                                  <div key={mesa.id || mesa.numero} className="p-3 border rounded">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <div className="font-bold">Mesa {mesa.numero}</div>
+                                      <div className="text-sm text-slate-500">Pedidos: {pedidosCount}</div>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <div className="text-sm text-slate-600">Itens: {(mesa.pedidos || []).reduce((acc:any, p:any) => acc + (p.itens?.length || 0), 0)}</div>
+                                      <div className="font-black text-slate-900">{Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-slate-400">Nenhuma mesa registrada no fechamento.</div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Se o fechamento não trouxe estatísticas agregadas, exibir total geral calculado */}
+                      <div className="mt-4">
+                        <h4 className="font-bold mb-2">Resumo</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="p-3 bg-slate-50 rounded">
+                            <div className="text-sm text-slate-500">Receita Total</div>
+                            <div className="text-lg font-black text-slate-900">{
+                              (() => {
+                                const mesas = modalContent.body.mesas || [];
+                                const total = mesas.reduce((acc:any, m:any) => acc + ((m.pedidos || []).reduce((s:any, p:any) => s + (p.total || 0), 0)), 0);
+                                return Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                              })()
+                            }</div>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded">
+                            <div className="text-sm text-slate-500">Pedidos</div>
+                            <div className="text-lg font-black text-slate-900">{(() => { const mesas = modalContent.body.mesas || []; return mesas.reduce((acc:any,m:any) => acc + ((m.pedidos || []).length || 0), 0); })()}</div>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded">
+                            <div className="text-sm text-slate-500">Mesas</div>
+                            <div className="text-lg font-black text-slate-900">{(modalContent.body.mesas || []).length}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : modalContent && modalContent.body && modalContent.body.totalRevenue !== undefined ? (
                     <div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                         <div className="p-4 bg-slate-50 rounded">
@@ -1030,6 +1195,26 @@ export const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                           </div>
                         </div>
                       </div>
+                      {Array.isArray(modalContent.body.closures) && modalContent.body.closures.length > 0 && (
+                        <div className="mt-6">
+                          <h4 className="font-bold mb-2">Fechamentos no Período</h4>
+                          <div className="space-y-2">
+                            {modalContent.body.closures.map((c:any) => {
+                              const mesasArr = c.mesas || [];
+                              const total = mesasArr.reduce((acc:any, m:any) => acc + ((m.pedidos || []).reduce((s:any,p:any)=> s + (p.total||0), 0)), 0);
+                              return (
+                                <div key={c.id || c.fechadoEm} className="p-3 border rounded flex items-center justify-between">
+                                  <div>
+                                    <div className="font-bold">Fechamento {c.id ? `#${c.id}` : ''}</div>
+                                    <div className="text-sm text-slate-500">{c.fechadoEm ? new Date(c.fechadoEm).toLocaleString() : (c.criadoEm ? new Date(c.criadoEm).toLocaleString() : '')} • {mesasArr.length} mesas</div>
+                                  </div>
+                                  <div className="font-black">{Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <pre className="whitespace-pre-wrap text-xs bg-slate-50 p-4 rounded">{JSON.stringify(modalContent.body, null, 2)}</pre>
