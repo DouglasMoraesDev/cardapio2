@@ -165,13 +165,14 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
     try {
       setIsLoading(true);
       const estabId = Number(localStorage.getItem('gm_estabelecimentoId') || 0);
-      await api.requestBill(estabId, Number(tableNumber));
-      alert('Solicitação de fechamento enviada!');
-      setIsAccountOpen(false);
-      // abrir modal de avaliação
-      setRatingStars(5);
-      setRatingComment('');
-      setShowRatingModal(true);
+      const res = await api.requestBill(estabId, Number(tableNumber));
+      // When client requests bill, backend only creates a notification. Do NOT close mesa or open rating modal here.
+      if (res && res.sucesso) {
+        alert('Solicitação de fechamento enviada. Aguarde o atendimento do administrador.');
+        setIsAccountOpen(false);
+      } else {
+        alert('Erro ao solicitar fechamento');
+      }
     } catch (e) {
       alert("Erro ao solicitar conta");
     } finally {

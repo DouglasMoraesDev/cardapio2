@@ -58,7 +58,9 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Fechar mesa (pedir fechamento) — por enquanto apenas marca pedidos como FECHADO e retorna total
+// Fechar mesa (ou apenas solicitar fechamento).
+// If request body contains `taxaPaga` (boolean) -> perform actual close (admin action).
+// If not, treat as a customer request to ask for the bill (create notification + broadcast) and DO NOT close the mesa.
 router.post('/:id/fechar', async (req, res) => {
   const param = req.params.id;
   try {
@@ -79,7 +81,29 @@ router.post('/:id/fechar', async (req, res) => {
     const pedidos = await prisma.pedido.findMany({ where: { mesaId: mesa.id } });
     const total = pedidos.reduce((acc, p) => acc + (p.total || 0), 0);
 
-    // broadcast: fechamento solicitado (antes de fechar efetivamente)
+    // If the request contains a taxaPaga field (admin closing the mesa), perform the final close.
+    if (Object.prototype.hasOwnProperty.call(req.body, 'taxaPaga')) {
+      const taxaPaga = !!req.body.taxaPaga;
+      // create notification for closure (optional)
+      let notifId: number | null = null;
+      try {
+        const notif = await prisma.notification.create({ data: {
+          tipo: 'mesa_fechamento_executado',
+          mesaId: mesa.id,
+          titulo: `Mesa finalizada — Mesa ${mesa.numero}`,
+          body: `Total: R$ ${Number(total || 0).toFixed(2)} — Taxa paga: ${taxaPaga ? 'Sim' : 'Não'}`,
+          estabelecimentoId: mesa.estabelecimentoId
+        } });
+        notifId = notif.id;
+      } catch (err) { console.warn('Falha ao criar Notification (mesa_fechamento_executado):', err); }
+      try { broadcast('mesa_fechamento_executado', { notificationId: notifId, mesaId: mesa.id, mesaNumero: mesa.numero, total, taxaPaga, estabelecimentoId: mesa.estabelecimentoId }); } catch (err) { /* ignore */ }
+
+      await prisma.pedido.updateMany({ where: { mesaId: mesa.id }, data: { status: 'FECHADO' } });
+      await prisma.mesa.update({ where: { id: mesa.id }, data: { aberta: false, taxaPaga, fechadaEm: new Date() } });
+      return res.json({ sucesso: true, total, taxaPaga });
+    }
+
+    // Otherwise it's a client request to ask for the bill: create a notification and broadcast, but do NOT close the mesa.
     let notifId: number | null = null;
     try {
       const notif = await prisma.notification.create({ data: {
@@ -90,16 +114,9 @@ router.post('/:id/fechar', async (req, res) => {
         estabelecimentoId: mesa.estabelecimentoId
       } });
       notifId = notif.id;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('Falha ao criar Notification (mesa_fechamento_solicitado):', err);
-    }
+    } catch (err) { console.warn('Falha ao criar Notification (mesa_fechamento_solicitado):', err); }
     try { broadcast('mesa_fechamento_solicitado', { notificationId: notifId, mesaId: mesa.id, mesaNumero: mesa.numero, total, estabelecimentoId: mesa.estabelecimentoId }); } catch (err) { /* ignore */ }
-
-    await prisma.pedido.updateMany({ where: { mesaId: mesa.id }, data: { status: 'FECHADO' } });
-    const taxaPaga = !!req.body.taxaPaga;
-    await prisma.mesa.update({ where: { id: mesa.id }, data: { aberta: false, taxaPaga, fechadaEm: new Date() } });
-    return res.json({ sucesso: true, total, taxaPaga });
+    return res.json({ sucesso: true, total, requested: true });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
