@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SuccessScreen } from './components/SuccessScreen';
 import { Header } from './components/Header';
+import { DevPortal } from './components/DevPortal';
 import { WaiterLogin } from './components/WaiterLogin';
 import { AdminLogin } from './components/AdminLogin';
 import { TableManagement } from './components/TableManagement';
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [formData, setFormData] = useState<RegistrationState | null>(null);
   const [waiterName, setWaiterName] = useState('Douglas');
   const [activeTable, setActiveTable] = useState<string | null>(null);
+  const [devView, setDevView] = useState<'dev-register'|'dev-login'|'dev-dashboard' | null>(null);
 
   const handleSubmitRegistration = (data: RegistrationState) => {
     setFormData(data);
@@ -53,6 +55,15 @@ const App: React.FC = () => {
         setView('menu');
       }
     } catch (e) { /* ignore */ }
+    // open dev portal when path is /dev or /dev/login or /dev/register
+    try {
+      const path = window.location.pathname || '';
+      if (path === '/dev' || path === '/dev/login') {
+        setDevView('dev-login');
+      } else if (path === '/dev/register') {
+        setDevView('dev-register');
+      }
+    } catch (e) { /* ignore */ }
   }, []);
 
   const mainClass = view === 'menu' ? 'flex-grow flex items-stretch justify-center p-0' : 'flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8';
@@ -62,7 +73,7 @@ const App: React.FC = () => {
       {view !== 'tables' && view !== 'admin-dashboard' && view !== 'menu' && (
         <Header 
           onWaiterLoginClick={() => setView('waiter-login')} 
-          onAdminLoginClick={() => setView('admin-login')} 
+          onAdminLoginClick={() => setView('admin-login')}
         />
       )}
       
@@ -105,6 +116,14 @@ const App: React.FC = () => {
         {view === 'admin-dashboard' && (
           <AdminDashboard onLogout={handleLogout} />
         )}
+
+        {devView && (
+          <div className="w-full flex justify-center">
+            <DevPortal initialView={devView === 'dev-login' ? 'login' : (devView === 'dev-dashboard' ? 'dashboard' : 'register')} onBack={() => setDevView(null)} />
+          </div>
+        )}
+
+        {/* If user visits /dev path directly, open DevPortal on login view */}
 
         {view === 'menu' && (
           <MenuView 

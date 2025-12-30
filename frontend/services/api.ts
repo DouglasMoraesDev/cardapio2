@@ -214,8 +214,12 @@ export const api = {
     const url = `${API_BASE}/api/estabelecimentos/me`;
     return fetchJson(url);
   },
-  async updateEstablishment(data: { taxa_servico?: number; tema_fundo_geral?: string; tema_fundo_cartoes?: string; tema_cor_texto?: string; tema_cor_primaria?: string; tema_cor_destaque?: string }) {
+  async updateEstablishment(data: { taxa_servico?: number; tema_fundo_geral?: string; tema_fundo_cartoes?: string; tema_cor_texto?: string; tema_cor_primaria?: string; tema_cor_destaque?: string; tema_fonte?: string; imagem_banner?: string }) {
     const url = `${API_BASE}/api/estabelecimentos/me`;
+    return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+  async updateEstablishmentById(id: number, data: { taxa_servico?: number; tema_fundo_geral?: string; tema_fundo_cartoes?: string; tema_cor_texto?: string; tema_cor_primaria?: string; tema_cor_destaque?: string; tema_fonte?: string; imagem_banner?: string }) {
+    const url = `${API_BASE}/api/estabelecimentos/${id}`;
     return fetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   },
 
@@ -258,6 +262,37 @@ export const api = {
     const qs = estabelecimentoId ? `?estabelecimentoId=${estabelecimentoId}` : '';
     const url = `${API_BASE}/api/avaliacoes${qs}`;
     return fetchJson(url);
+  }
+  ,
+  async listEstablishments() {
+    const url = `${API_BASE}/api/estabelecimentos`;
+    return fetchJson(url);
+  },
+  async getEstablishmentById(id: number) {
+    const url = `${API_BASE}/api/estabelecimentos/${id}`;
+    return fetchJson(url);
+  },
+  async deleteEstablishment(id: number) {
+    const url = `${API_BASE}/api/estabelecimentos/${id}`;
+    return fetchJson(url, { method: 'DELETE' });
+  },
+  async getEstablishmentStats(id: number) {
+    const qs = new URLSearchParams({ estabelecimentoId: String(id) });
+    const url = `${API_BASE}/api/stats/daily?${qs.toString()}`;
+    return fetchJson(url);
+  },
+  // --- Dev Portal ---
+  async registerDev(username: string, password: string) {
+    const url = `${API_BASE}/api/dev/register`;
+    return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+  },
+  async loginDev(username: string, password: string) {
+    const url = `${API_BASE}/api/dev/login`;
+    const res = await fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    if (res && res.sucesso && res.token) {
+      try { localStorage.setItem('gm_token', res.token); } catch (e) { /* ignore */ }
+    }
+    return res;
   }
 };
 

@@ -20,6 +20,8 @@ model Estabelecimento {
   tema_cor_texto String? @db.VarChar(20)
   tema_cor_primaria String? @db.VarChar(20)
   tema_cor_destaque String? @db.VarChar(20)
+  tema_fonte       String? @db.VarChar(50)
+  imagem_banner    String? @db.Text
   texto_cardapio    String? @db.Text
   ultimo_fechamento DateTime?
   criadoEm      DateTime  @default(now())
@@ -151,4 +153,12 @@ enum PedidoStatus {
   ENVIADO
   SERVIDO
   FECHADO
+}
+
+model DevUser {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  role         String?  @db.VarChar(50)
+  criadoEm     DateTime @default(now())
 }

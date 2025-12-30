@@ -11,6 +11,7 @@ import { MenuView } from './frontend/components/MenuView';
 import { RegistrationState } from './types';
 
 type View = 'register' | 'waiter-login' | 'admin-login' | 'success' | 'tables' | 'admin-dashboard' | 'menu';
+// add dev views
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('register');
@@ -50,7 +51,7 @@ const App: React.FC = () => {
       {view !== 'tables' && view !== 'admin-dashboard' && view !== 'menu' && (
         <Header 
           onWaiterLoginClick={() => setView('waiter-login')} 
-          onAdminLoginClick={() => setView('admin-login')} 
+          onAdminLoginClick={() => setView('admin-login')}
         />
       )}
       
@@ -93,6 +94,8 @@ const App: React.FC = () => {
         {view === 'admin-dashboard' && (
           <AdminDashboard onLogout={handleLogout} />
         )}
+
+          {/* DevPortal moved to a separate page at /dev */}
 
         {view === 'menu' && (
           <MenuView 

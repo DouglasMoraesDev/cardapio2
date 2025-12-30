@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 
 import estabelecimentosRouter from './routes/estabelecimentos';
+import devRouter from './routes/dev';
 import authRouter from './routes/auth';
 import produtosRouter from './routes/produtos';
 import categoriasRouter from './routes/categorias';
@@ -39,6 +40,7 @@ app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'public', 'u
 
 // Rotas da API
 app.use('/api/estabelecimentos', estabelecimentosRouter);
+app.use('/api/dev', devRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/produtos', produtosRouter);
 app.use('/api/categorias', categoriasRouter);

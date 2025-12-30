@@ -203,6 +203,8 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
 
   const [establishment, setEstablishment] = useState<any>(null);
   const [taxaServico, setTaxaServico] = useState<number>(0);
+  const [appliedFont, setAppliedFont] = useState<string>('Inter');
+  const [bannerUrlState, setBannerUrlState] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -219,6 +221,13 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
         if (est) {
           setEstablishment(est);
           setTaxaServico(Number(est.taxa_servico || 0));
+          // set banner and font from establishment when available
+          if (est.tema_fonte) setAppliedFont(est.tema_fonte);
+          if (est.imagem_banner) {
+            const raw = String(est.imagem_banner || '');
+            const prefixed = raw.startsWith('/') ? `${API_BASE}${raw}` : raw;
+            setBannerUrlState(prefixed);
+          }
         }
       } catch (e) { /* ignore */ }
     };
@@ -268,6 +277,36 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
     } catch (e) { /* ignore */ }
     return () => { try { if (es) es.close(); } catch (e) {} };
   }, []);
+
+  // Load dev/local overrides
+  useEffect(() => {
+    try {
+      const localBanner = localStorage.getItem('gm_dev_banner');
+      const localFont = localStorage.getItem('gm_dev_font');
+      if (localBanner) setBannerUrlState(localBanner);
+      if (localFont) setAppliedFont(localFont);
+    } catch (e) {}
+  }, []);
+
+  // Dynamically load Google Fonts for selected font families when needed
+  useEffect(() => {
+    try {
+      const font = appliedFont || 'Inter';
+      const headId = `gm-font-${font.replace(/\s+/g, '-')}`;
+      if (document.getElementById(headId)) return;
+      let href = '';
+      if (font === 'Inter') href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+      else if (font === 'Roboto') href = 'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap';
+      else if (font === 'Montserrat') href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;700&display=swap';
+      if (href) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.id = headId;
+        document.head.appendChild(link);
+      }
+    } catch (e) { console.warn('Erro ao carregar fonte', e); }
+  }, [appliedFont]);
 
   // Apply background color to whole document to avoid white borders
   useEffect(() => {
@@ -329,13 +368,20 @@ export const MenuView: React.FC<Props> = ({ onBack, waiterName, tableNumber }) =
   const cardBorder = (establishment?.tema_fundo_cartoes && establishment.tema_fundo_cartoes !== '#ffffff') ? 'rgba(255,255,255,0.08)' : '#e6e6e6';
 
   return (
-    <div style={{ backgroundColor: establishment?.tema_fundo_geral || undefined, color: textColor, width: '100vw', minHeight: '100vh' }} className="w-screen min-h-screen flex justify-center">
+    <div style={{ backgroundColor: establishment?.tema_fundo_geral || undefined, color: textColor, width: '100vw', minHeight: '100vh', fontFamily: appliedFont }} className="w-screen min-h-screen flex justify-center">
+      {/* banner (if present) */}
+      {bannerUrlState && (
+        <div className="w-full fixed top-0 left-0 z-40">
+          <img src={bannerUrlState} alt="banner" className="w-full h-40 object-cover" />
+        </div>
+      )}
       {toastMessage && (
         <div className="fixed left-1/2 -translate-x-1/2 top-6 z-50">
           <div className="px-4 py-3 rounded-full shadow-lg bg-black/70 text-white font-bold">{toastMessage}</div>
         </div>
       )}
       <div className="w-full max-w-6xl min-h-[80vh] px-6 lg:px-12 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden" style={{ color: textColor }}>
+      <div style={{ height: bannerUrlState ? 160 : undefined }} />
       {/* Header */}
       <div style={{ backgroundColor: cardBg, color: textColor }} className="px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm rounded-t-2xl">
         <div className="flex items-center gap-3">

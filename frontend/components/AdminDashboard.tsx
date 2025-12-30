@@ -1237,6 +1237,9 @@ const AjustesForm: React.FC = () => {
   const [corPrimaria, setCorPrimaria] = useState('#d18a59');
   const [corDestaque, setCorDestaque] = useState('#c17a49');
   const [textoCardapio, setTextoCardapio] = useState<string>('');
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerUrlState, setBannerUrlState] = useState<string>('');
+  const [fontFamilyState, setFontFamilyState] = useState<string>('Inter');
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -1251,6 +1254,10 @@ const AjustesForm: React.FC = () => {
         setCorPrimaria(est.tema_cor_primaria ?? '#d18a59');
         setCorDestaque(est.tema_cor_destaque ?? '#c17a49');
         setTextoCardapio(est.texto_cardapio ?? '');
+        let bannerVal = est.imagem_banner ?? '';
+        if (bannerVal && typeof bannerVal === 'string' && bannerVal.startsWith('/')) bannerVal = `${API_BASE}${bannerVal}`;
+        setBannerUrlState(bannerVal);
+        setFontFamilyState(est.tema_fonte ?? 'Inter');
       }
     } catch (e) {
       console.error('Erro ao carregar ajustes', e);
@@ -1262,7 +1269,14 @@ const AjustesForm: React.FC = () => {
   const save = async () => {
     try {
       setLoading(true);
-      await api.updateEstablishment({ taxa_servico: taxa, tema_fundo_geral: fundoGeral, tema_fundo_cartoes: fundoCartoes, tema_cor_texto: corTexto, tema_cor_primaria: corPrimaria, tema_cor_destaque: corDestaque, texto_cardapio: textoCardapio });
+      let imagem_banner_to_save = bannerUrlState;
+      if (bannerFile) {
+        try {
+          const up = await api.uploadProductImage(bannerFile);
+          imagem_banner_to_save = up?.url || up?.imagem_url || up?.imageUrl || imagem_banner_to_save;
+        } catch (e) { console.warn('Falha ao enviar banner', e); }
+      }
+      await api.updateEstablishment({ taxa_servico: taxa, tema_fundo_geral: fundoGeral, tema_fundo_cartoes: fundoCartoes, tema_cor_texto: corTexto, tema_cor_primaria: corPrimaria, tema_cor_destaque: corDestaque, texto_cardapio: textoCardapio, tema_fonte: fontFamilyState, imagem_banner: imagem_banner_to_save });
       alert('Ajustes salvos');
     } catch (e) {
       console.error('Erro ao salvar ajustes', e);
@@ -1318,6 +1332,31 @@ const AjustesForm: React.FC = () => {
               <div className="flex items-center gap-3">
                 <input value={corDestaque} onChange={e => setCorDestaque(e.target.value)} className="text-xs font-mono text-slate-400 px-2 py-1 border rounded" />
                 <div className="w-8 h-8 rounded-lg border border-slate-200 shadow-sm" style={{ backgroundColor: corDestaque }} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+              <div>
+                <div className="text-sm font-bold text-slate-700">Banner do Cardápio</div>
+                <div className="text-xs text-slate-400">Imagem exibida no topo do cardápio público</div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <input type="file" accept="image/*" onChange={e => setBannerFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+                {bannerUrlState && <img src={bannerUrlState} alt="banner" className="w-24 h-12 object-cover rounded" />}
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+              <div>
+                <div className="text-sm font-bold text-slate-700">Fonte do Cardápio</div>
+                <div className="text-xs text-slate-400">Selecione a fonte utilizada no cardápio público</div>
+              </div>
+              <div>
+                <select value={fontFamilyState} onChange={e => setFontFamilyState(e.target.value)} className="px-2 py-1 border rounded">
+                  <option value="Inter">Inter</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Arial">Arial</option>
+                </select>
               </div>
             </div>
             <div className="mt-4">

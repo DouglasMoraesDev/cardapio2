@@ -29,6 +29,7 @@ export const Header: React.FC<Props> = ({ onWaiterLoginClick, onAdminLoginClick 
         >
           Área do Garçom
         </button>
+        {/* Dev Portal removed from header — use /dev path to access developer portal */}
       </div>
     </header>
   );
