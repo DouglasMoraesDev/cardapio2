@@ -22,6 +22,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Log incoming requests for debugging in production
+app.use((req, _res, next) => {
+  try {
+    // log method, url and remote address
+    // eslint-disable-next-line no-console
+    console.log(`REQ ${req.method} ${req.url} ip=${req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress}`);
+  } catch (e) {
+    // ignore logging errors
+  }
+  next();
+});
+
 // Servir uploads públicos
 app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'public', 'uploads')));
 
