@@ -12,7 +12,19 @@ if (typeof window !== 'undefined' && window.location) {
     defaultBase = origin;
   }
 }
-export const API_BASE = (viteUrl || defaultBase).replace(/\/$/, '');
+let API_BASE = (viteUrl || defaultBase).replace(/\/$/, '');
+// Allow developer override when accessing production UI: set localStorage 'gm_force_local_api' = 'true'
+// in your browser to force API calls to `http://localhost:4000` (useful for testing against a local backend).
+try {
+  if (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('gm_force_local_api') === 'true') {
+    API_BASE = 'http://localhost:4000';
+    // eslint-disable-next-line no-console
+    console.info('API_BASE overridden to http://localhost:4000 via localStorage gm_force_local_api');
+  }
+} catch (e) {
+  // ignore
+}
+export { API_BASE };
 
 const TOKEN_KEY = 'gm_token';
 const ESTAB_KEY = 'gm_estabelecimentoId';
