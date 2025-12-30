@@ -10,6 +10,11 @@ if [ "${PRISMA_MIGRATE_ON_STARTUP:-false}" = "true" ] || [ "${NODE_ENV:-}" = "pr
   node -e "const http=require('http');const p=process.env.PORT||4000;const s=http.createServer((req,res)=>{if(req.url==='/_health'){res.writeHead(200);res.end('ok')}else{res.writeHead(200);res.end('ok')}});s.listen(p,'0.0.0.0');console.log('temp-healthlistening',p);process.on('message',m=>{if(m==='stop')s.close()});" &
   TEMP_HEALTH_PID=$!
   echo "[entrypoint] temp health pid=$TEMP_HEALTH_PID"
+  # Start the actual server in background so the container accepts connections
+  echo "[entrypoint] Starting main server in background"
+  node backend/dist/index.js &
+  SERVER_PID=$!
+  echo "[entrypoint] main server pid=$SERVER_PID"
   # Prefer the prisma binary installed under backend/node_modules to avoid npx fetching other versions
   if [ -f ./backend/node_modules/.bin/prisma ]; then
     echo "[entrypoint] Using prisma from backend/node_modules"
@@ -29,4 +34,10 @@ if [ -n "${TEMP_HEALTH_PID:-}" ]; then
   unset TEMP_HEALTH_PID
 fi
 
-exec node backend/dist/index.js
+# Wait for main server (foreground) if we started it in background
+if [ -n "${SERVER_PID:-}" ]; then
+  echo "[entrypoint] waiting for main server pid=${SERVER_PID}"
+  wait ${SERVER_PID}
+else
+  exec node backend/dist/index.js
+fi
